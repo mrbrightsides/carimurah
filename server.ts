@@ -7,14 +7,28 @@ import dotenv from "dotenv";
 import { connectToDatabase } from "./mongodb";
 import { ObjectId } from "mongodb";
 import { v4 as uuidv4 } from "uuid";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: "150mb" }));
+
+// Skip JSON body-parsing globally for MCP message handler so SSEServerTransport can parse the stream natively
+app.use((req, res, next) => {
+  if (req.path === "/mcp/message") {
+    next();
+  } else {
+    express.json({ limit: "150mb" })(req, res, next);
+  }
+});
 
 // Simple logger for tracking
 app.use((req, res, next) => {
@@ -56,183 +70,168 @@ app.get("/mcp", (req, res) => {
   res.redirect("/mcp/info");
 });
 
-// --- MCP SSE Protocol Implementation ---
-const mcpSessions = new Map<string, express.Response>();
+// --- MCP SDK Server and Handlers Setup ---
+const mcpServer = new Server(
+  {
+    name: "carimurah-mongodb-mcp",
+    version: "1.0.0",
+  },
+  {
+    capabilities: {
+      tools: {},
+    },
+  }
+);
 
-app.post("/mcp/message", async (req, res) => {
-  const sessionId = req.query.sessionId as string;
-  const message = req.body;
-  if (!sessionId || !mcpSessions.has(sessionId)) return res.status(404).json({ error: "Session not found" });
-
-  try {
-    if (message.method === "initialize") {
-      return res.json({
-        jsonrpc: "2.0", id: message.id,
-        result: {
-          protocolVersion: "2024-11-05",
-          capabilities: { tools: {} },
-          serverInfo: { name: "carimurah-mongodb-mcp", version: "1.0.0" }
+// Register Tool Discovery handler
+mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: [
+      {
+        name: "get_user_profile",
+        description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB Atlas.",
+        inputSchema: {
+          type: "object",
+          properties: { uid: { type: "string", description: "ID unik Firebase User" } },
+          required: ["uid"]
         }
-      });
-    }
-    if (message.method === "tools/list") {
-      return res.json({
-        jsonrpc: "2.0", id: message.id,
-        result: {
-          tools: [
-            {
-              name: "get_user_profile",
-              description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB Atlas.",
-              inputSchema: {
-                type: "object",
-                properties: { uid: { type: "string", description: "ID unik Firebase User" } },
-                required: ["uid"]
-              }
-            },
-            {
-              name: "update_user_profile",
-              description: "Menyimpan atau memperbarui preferensi profil belanja user (B2B focus, preference) ke database MongoDB.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  uid: { type: "string" },
-                  preferences: {
-                    type: "object",
-                    properties: {
-                      b2b_focus: { type: "string", enum: ["price", "delivery", "rating"] },
-                      is_b2b: { type: "boolean" }
-                    }
-                  }
-                },
-                required: ["uid"]
-              }
-            },
-            {
-              name: "process_analysis",
-              description: "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah di marketplace.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  text: { type: "string" },
-                  image: { type: "string" },
-                  is_b2b: { type: "boolean" }
-                },
-                required: ["text"]
-              }
-            },
-            {
-              name: "get_user_history",
-              description: "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB Atlas.",
-              inputSchema: {
-                type: "object",
-                properties: { uid: { type: "string" } },
-                required: ["uid"]
-              }
-            },
-            {
-              name: "save_to_history",
-              description: "Menyimpan hasil temuan harga termurah ke riwayat permanen user di MongoDB Atlas.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  uid: { type: "string" },
-                  product_data: {
-                    type: "object",
-                    properties: {
-                      product_name: { type: "string" },
-                      recommended_price: { type: "number" },
-                      platform: { type: "string" },
-                      total_saved: { type: "number" }
-                    }
-                  }
-                },
-                required: ["uid", "product_data"]
+      },
+      {
+        name: "update_user_profile",
+        description: "Menyimpan atau memperbarui preferensi profil belanja user (B2B focus, preference) ke database MongoDB.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            uid: { type: "string" },
+            preferences: {
+              type: "object",
+              properties: {
+                b2b_focus: { type: "string", enum: ["price", "delivery", "rating"] },
+                is_b2b: { type: "boolean" }
               }
             }
-          ]
+          },
+          required: ["uid"]
         }
-      });
-    }
-    if (message.method === "tools/call") {
-      const { name, arguments: args } = message.params;
-      const { db } = await connectToDatabase();
-      let result;
-      
-      if (name === "get_user_profile") {
-        result = await db.collection("users").findOne({ uid: args.uid });
-      } else if (name === "update_user_profile") {
-        await db.collection("users").updateOne(
-          { uid: args.uid },
-          { $set: { ...args.preferences, updatedAt: new Date().toISOString() } },
-          { upsert: true }
-        );
-        result = { success: true };
-      } else if (name === "get_user_history") {
-        const history = await db.collection("history").find({ userId: args.uid }).sort({ date: -1 }).limit(20).toArray();
-        result = history.map(h => ({ ...h, id: h._id.toString() }));
-      } else if (name === "save_to_history") {
-        const r = await db.collection("history").insertOne({
-          ...args.product_data,
-          userId: args.uid,
-          createdAt: new Date().toISOString()
-        });
-        result = { success: true, id: r.insertedId.toString() };
-      } else if (name === "process_analysis") {
-        // Mocking the call to internal logic
-        result = { status: "processing", message: "Gunakan API endpoint utama untuk analisis mendalam dengan Gemini." };
+      },
+      {
+        name: "process_analysis",
+        description: "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah di marketplace.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: { type: "string" },
+            image: { type: "string" },
+            is_b2b: { type: "boolean" }
+          },
+          required: ["text"]
+        }
+      },
+      {
+        name: "get_user_history",
+        description: "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB Atlas.",
+        inputSchema: {
+          type: "object",
+          properties: { uid: { type: "string" } },
+          required: ["uid"]
+        }
+      },
+      {
+        name: "save_to_history",
+        description: "Menyimpan hasil temuan harga termurah ke riwayat permanen user di MongoDB Atlas.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            uid: { type: "string" },
+            product_data: {
+              type: "object",
+              properties: {
+                product_name: { type: "string" },
+                recommended_price: { type: "number" },
+                platform: { type: "string" },
+                total_saved: { type: "number" }
+              }
+            }
+          },
+          required: ["uid", "product_data"]
+        }
       }
-
-      return res.json({
-        jsonrpc: "2.0", 
-        id: message.id, 
-        result: { 
-          content: [{ type: "text", text: JSON.stringify(result || { status: "not_found" }) }] 
-        } 
-      });
-    }
-    res.json({ jsonrpc: "2.0", id: message.id, result: {} });
-  } catch (error: any) {
-    res.status(500).json({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: error.message } });
-  }
+    ]
+  };
 });
 
-app.get("/mcp/sse", (req, res) => {
-  const sessionId = uuidv4();
+// Register Tool Execution handler
+mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  const { db } = await connectToDatabase();
+  let result;
   
-  // Set headers for SSE with explicit CORS and no-cache
+  if (name === "get_user_profile") {
+    result = await db.collection("users").findOne({ uid: args?.uid });
+  } else if (name === "update_user_profile") {
+    const preferences = args?.preferences as any;
+    await db.collection("users").updateOne(
+      { uid: args?.uid },
+      { $set: { ...preferences, updatedAt: new Date().toISOString() } },
+      { upsert: true }
+    );
+    result = { success: true };
+  } else if (name === "get_user_history") {
+    const history = await db.collection("history").find({ userId: args?.uid }).sort({ date: -1 }).limit(20).toArray();
+    result = history.map(h => ({ ...h, id: h._id.toString() }));
+  } else if (name === "save_to_history") {
+    const product_data = args?.product_data as any;
+    const r = await db.collection("history").insertOne({
+      ...product_data,
+      userId: args?.uid,
+      createdAt: new Date().toISOString()
+    });
+    result = { success: true, id: r.insertedId.toString() };
+  } else if (name === "process_analysis") {
+    result = { status: "processing", message: "Gunakan API endpoint utama untuk analisis mendalam dengan Gemini." };
+  } else {
+    throw new Error(`Tool ${name} not found`);
+  }
+
+  return {
+    content: [{ type: "text", text: JSON.stringify(result || { status: "not_found" }) }]
+  };
+});
+
+// SSEServerTransport Client Sessions
+const sseTransports = new Map<string, SSEServerTransport>();
+
+app.get("/mcp/sse", async (req, res) => {
+  console.log("[MCP] New incoming SSE transport connection requested");
+  
+  // Set explicit headers for proxy and buffer flushing
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("X-Accel-Buffering", "no");
 
-  res.flushHeaders();
-
-  // Keep-alive comment sent every 15 seconds to prevent timeout
-  const keepAlive = setInterval(() => {
-    if (res.writableEnded) {
-      clearInterval(keepAlive);
-      return;
-    }
-    res.write(": keep-alive\n\n");
-  }, 15000);
-
-  const host = req.headers.host || "localhost:3000";
-  const protocol = host.includes("localhost") ? "http" : "https";
-  const baseUrl = `${protocol}://${host}`;
-  const endpointUrl = `${baseUrl}/mcp/message?sessionId=${sessionId}`;
+  const transport = new SSEServerTransport("/mcp/message", res as any);
+  await mcpServer.connect(transport);
   
-  // Initial endpoint event - MUST be exactly this format for discovery
-  res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
-  
-  console.log(`[MCP] New SSE session created: ${sessionId} for ${host}`);
-  mcpSessions.set(sessionId, res);
+  const sessionId = transport.sessionId;
+  sseTransports.set(sessionId, transport);
+  console.log(`[MCP] SSE session established. Session ID: ${sessionId}`);
 
   req.on("close", () => {
-    console.log(`[MCP] SSE session closed: ${sessionId}`);
-    clearInterval(keepAlive);
-    mcpSessions.delete(sessionId);
+    console.log(`[MCP] SSE connection closed for session: ${sessionId}`);
+    sseTransports.delete(sessionId);
   });
+});
+
+app.post("/mcp/message", async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  const transport = sseTransports.get(sessionId);
+  
+  if (!transport) {
+    return res.status(404).json({ error: "Session not found" });
+  }
+  
+  await transport.handleMessage(req as any, res as any);
 });
 
 // Helper for toolspec.json to paste in GCP
