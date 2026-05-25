@@ -6,6 +6,7 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import dotenv from "dotenv";
 import { connectToDatabase } from "./mongodb";
 import { ObjectId } from "mongodb";
+import { v4 as uuidv4 } from "uuid";
 
 dotenv.config();
 
@@ -14,6 +15,78 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "150mb" }));
+
+// --- MCP SSE Protocol Implementation ---
+const mcpSessions = new Map<string, express.Response>();
+
+app.post("/message", async (req, res) => {
+  const sessionId = req.query.sessionId as string;
+  const message = req.body;
+  if (!sessionId || !mcpSessions.has(sessionId)) return res.status(404).json({ error: "Session not found" });
+
+  try {
+    if (message.method === "initialize") {
+      return res.json({
+        jsonrpc: "2.0", id: message.id,
+        result: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          serverInfo: { name: "carimurah-mongodb-mcp", version: "1.0.0" }
+        }
+      });
+    }
+    if (message.method === "tools/list") {
+      return res.json({
+        jsonrpc: "2.0", id: message.id,
+        result: {
+          tools: [
+            {
+              name: "getUserProfile",
+              description: "Ambil preferensi belanja user dari MongoDB.",
+              inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+            },
+            {
+              name: "saveToHistory",
+              description: "Simpan temuan harga termurah ke riwayat user di MongoDB.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  uid: { type: "string" },
+                  productData: { type: "object", properties: { productName: { type: "string" }, recommendedPrice: { type: "number" }, platform: { type: "string" }, totalSaved: { type: "number" } } }
+                },
+                required: ["uid", "productData"]
+              }
+            }
+          ]
+        }
+      });
+    }
+    if (message.method === "tools/call") {
+      const { name, arguments: args } = message.params;
+      const { db } = await connectToDatabase();
+      let result;
+      if (name === "getUserProfile") result = await db.collection("users").findOne({ uid: args.uid });
+      if (name === "saveToHistory") {
+        const r = await db.collection("history").insertOne({ ...args.productData, userId: args.uid, createdAt: new Date().toISOString() });
+        result = { success: true, id: r.insertedId.toString() };
+      }
+      return res.json({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: JSON.stringify(result || { status: "not_found" }) }] } });
+    }
+    res.json({ jsonrpc: "2.0", id: message.id, result: {} });
+  } catch (error: any) {
+    res.status(500).json({ jsonrpc: "2.0", id: message.id, error: { code: -32603, message: error.message } });
+  }
+});
+
+app.get("/sse", (req, res) => {
+  const sessionId = uuidv4();
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" });
+  const endpointUrl = new URL(req.url, `https://${req.headers.host}`).origin + `/message?sessionId=${sessionId}`;
+  res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
+  mcpSessions.set(sessionId, res);
+  req.on("close", () => mcpSessions.delete(sessionId));
+});
+// --- End of MCP ---
 
 // Simple logger for Agent Builder tracking
 app.use((req, res, next) => {

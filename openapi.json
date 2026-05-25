@@ -7,28 +7,26 @@
   },
   "servers": [
     {
-      "url": "https://ais-pre-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
-      "description": "Shared App Server (AIS Preview)"
-    },
-    {
       "url": "https://carimurah-ai-875241790017.europe-west1.run.app",
       "description": "Production Server (Cloud Run)"
     },
     {
-      "url": "https://ais-dev-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
-      "description": "Development Server (AIS)"
+      "url": "https://ais-pre-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
+      "description": "Shared App Server (AIS Preview)"
     }
   ],
   "paths": {
     "/api/profile/{uid}": {
       "get": {
-        "summary": "Get user profile",
+        "summary": "Retrieve user profile and preferences",
+        "description": "Gets the user's stored profile from MongoDB, including their B2B/B2C focus (price, delivery, or rating) and subscription level.",
         "operationId": "getUserProfile",
         "parameters": [
           {
             "name": "uid",
             "in": "path",
             "required": true,
+            "description": "Unique Firebase User ID",
             "schema": { "type": "string" }
           }
         ],
@@ -44,17 +42,20 @@
         }
       },
       "post": {
-        "summary": "Update user profile",
+        "summary": "Create or update user profile",
+        "description": "Saves user preferences to MongoDB. Use this to set whether the user prefers retail (B2C) or wholesale (B2B) findings.",
         "operationId": "updateUserProfile",
         "parameters": [
           {
             "name": "uid",
             "in": "path",
             "required": true,
+            "description": "Unique Firebase User ID",
             "schema": { "type": "string" }
           }
         ],
         "requestBody": {
+          "description": "Profile data to save",
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/UserProfile" }
@@ -62,27 +63,27 @@
           }
         },
         "responses": {
-          "200": { "description": "Success" }
+          "200": { "description": "Profile updated successfully" }
         }
       }
     },
     "/api/history": {
       "get": {
-        "summary": "Get generic or global shopping history",
-        "description": "Returns a list of recent shopping analysis items. useful for getting trends or samples.",
+        "summary": "Get global or sample shopping history",
+        "description": "Returns a list of recent analysis results. Can be filtered by uid as a query parameter.",
         "operationId": "getGlobalHistory",
         "parameters": [
           {
             "name": "uid",
             "in": "query",
-            "description": "Optional user ID to filter history",
+            "description": "Optional user ID to filter findings",
             "required": false,
             "schema": { "type": "string" }
           }
         ],
         "responses": {
           "200": {
-            "description": "List of history items",
+            "description": "List of findings",
             "content": {
               "application/json": {
                 "schema": {
@@ -98,13 +99,14 @@
     "/api/history/{uid}": {
       "get": {
         "summary": "Get specific user shopping history",
-        "description": "Returns all saved items for a specific User ID from MongoDB.",
+        "description": "Returns the list of all products found and analyzed for a specific user from MongoDB.",
         "operationId": "getUserHistory",
         "parameters": [
           {
             "name": "uid",
             "in": "path",
             "required": true,
+            "description": "Firebase User ID",
             "schema": { "type": "string" }
           }
         ],
@@ -123,18 +125,20 @@
         }
       },
       "post": {
-        "summary": "Save item to user history",
-        "description": "Adds a new analyzed product item to the user's MongoDB history collection.",
+        "summary": "Save a finding to user history",
+        "description": "Persists an analysis result (product, price, platform, and savings) to the user's permanent history in MongoDB.",
         "operationId": "saveToHistory",
         "parameters": [
           {
             "name": "uid",
             "in": "path",
             "required": true,
+            "description": "Firebase User ID",
             "schema": { "type": "string" }
           }
         ],
         "requestBody": {
+          "description": "The finding details to save",
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/HistoryItemCreate" }
@@ -158,8 +162,8 @@
     },
     "/api/history/{uid}/{historyId}": {
       "patch": {
-        "summary": "Update a history item",
-        "description": "Modify details of a specific saved history item in MongoDB.",
+        "summary": "Update specific history item",
+        "description": "Update notes or details for a previously saved finding.",
         "operationId": "updateHistoryItem",
         "parameters": [
           {
@@ -183,29 +187,14 @@
           }
         },
         "responses": {
-          "200": { "description": "Success" }
-        }
-      }
-    },
-    "/api/health": {
-      "get": {
-        "summary": "Check API health",
-        "operationId": "checkHealth",
-        "responses": {
-          "200": {
-            "description": "Server is healthy",
-            "content": {
-              "application/json": {
-                "schema": { "type": "object", "properties": { "status": { "type": "string" } } }
-              }
-            }
-          }
+          "200": { "description": "Update successful" }
         }
       }
     },
     "/api/process": {
       "post": {
-        "summary": "Run agentic shopping analysis",
+        "summary": "Process image or text for price analysis",
+        "description": "Main agentic workflow. Analyze search queries or receipt images to find best prices on Tokopedia/Shopee.",
         "operationId": "processAnalysis",
         "requestBody": {
           "content": {
@@ -213,16 +202,65 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "text": { "type": "string" },
-                  "image": { "type": "string", "description": "Base64 image string" },
-                  "isB2B": { "type": "boolean" }
-                }
+                  "text": { "type": "string", "description": "Search query or description of the product" },
+                  "image": { "type": "string", "description": "Optional Base64 encoded image (JPEG) of product or receipt" },
+                  "isB2B": { "type": "boolean", "description": "Set true to look for Grosir/Wholesale prices" },
+                  "preferences": { "$ref": "#/components/schemas/UserProfile" }
+                },
+                "required": ["text"]
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Analysis result" }
+          "200": { "description": "Detailed multi-agent analysis result" }
+        }
+      }
+    },
+    "/api/tts": {
+      "post": {
+        "summary": "Convert text to Zephyr AI voice",
+        "description": "Generates high-quality studio audio for shopping summaries using the Zephyr persona voice.",
+        "operationId": "textToSpeech",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string", "description": "Text to read aloud" },
+                  "voice": { "type": "string", "default": "Zephyr", "enum": ["Zephyr", "Puck", "Charon"] }
+                },
+                "required": ["text"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Base64 encoded audio data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "audio": { "type": "string", "description": "Base64 string" },
+                    "rate": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Service status",
+        "operationId": "checkHealth",
+        "responses": {
+          "200": { "description": "Active" }
         }
       }
     }
