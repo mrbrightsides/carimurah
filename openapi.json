@@ -7,19 +7,69 @@
   },
   "servers": [
     {
-      "url": "https://ais-pre-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
-      "description": "Shared App Server (AIS Preview)"
-    },
-    {
-      "url": "https://carimurah-ai-875241790017.europe-west1.run.app/",
+      "url": "https://carimurah-ai-875241790017.europe-west1.run.app",
       "description": "Production Server (Cloud Run)"
-    },
-    {
-      "url": "https://ais-dev-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
-      "description": "Development Server (AIS)"
     }
   ],
   "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Check API health",
+        "operationId": "checkHealth",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/process": {
+      "post": {
+        "summary": "Run agentic shopping analysis",
+        "operationId": "processAnalysis",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string", "description": "User query or prompt" },
+                  "image": { "type": "string", "description": "Base64 image string of receipt/invoice" },
+                  "isB2B": { "type": "boolean", "description": "Flag for procurement features" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis result successfully generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "message": { "type": "string", "description": "The final response message from CariMurah engine" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/profile/{uid}": {
       "get": {
         "summary": "Get user profile",
@@ -55,6 +105,7 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/UserProfile" }
@@ -62,7 +113,9 @@
           }
         },
         "responses": {
-          "200": { "description": "Success" }
+          "200": {
+            "description": "Success"
+          }
         }
       }
     },
@@ -93,45 +146,6 @@
           }
         }
       }
-    },
-    "/api/health": {
-      "get": {
-        "summary": "Check API health",
-        "operationId": "checkHealth",
-        "responses": {
-          "200": {
-            "description": "Server is healthy",
-            "content": {
-              "application/json": {
-                "schema": { "type": "object", "properties": { "status": { "type": "string" } } }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/process": {
-      "post": {
-        "summary": "Run agentic shopping analysis",
-        "operationId": "processAnalysis",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "text": { "type": "string" },
-                  "image": { "type": "string", "description": "Base64 image string" },
-                  "isB2B": { "type": "boolean" }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": { "description": "Analysis result" }
-        }
-      }
     }
   },
   "components": {
@@ -147,10 +161,10 @@
             "type": "object",
             "properties": {
               "tier": { "type": "string", "enum": ["FREE", "PRO", "ENTERPRISE"] }
-            }
           }
         }
-      },
+      }
+    },
       "HistoryItem": {
         "type": "object",
         "properties": {
