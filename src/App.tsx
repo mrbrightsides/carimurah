@@ -1,3 +1,5 @@
+declare var pendo: { trackAgent: (eventType: string, metadata: object) => void };
+
 import { motion, AnimatePresence } from "motion/react";
 import React, { useState, useRef, useEffect } from "react";
 import { 
@@ -245,17 +247,43 @@ export default function App() {
     if (history.length === 0) return;
     setIsGeneratingSummary(true);
     setMonthlySummary(null);
+
+    const conversationId = crypto.randomUUID();
+    const promptMessageId = crypto.randomUUID();
+
+    if (typeof pendo !== "undefined") {
+      pendo.trackAgent("prompt", {
+        agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+        conversationId,
+        messageId: promptMessageId,
+        content: "Generate monthly savings summary",
+        suggestedPrompt: true,
+      });
+    }
+
     try {
       const res = await fetch("/api/monthly-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           history: history.slice(0, 50), // Send recent 50 for context
-          preferences: profile?.preferences 
+          preferences: profile?.preferences
         }),
       });
       const data = await res.json();
-      if (data.report) setMonthlySummary(data.report);
+      if (data.report) {
+        setMonthlySummary(data.report);
+
+        if (typeof pendo !== "undefined") {
+          pendo.trackAgent("agent_response", {
+            agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+            conversationId,
+            messageId: crypto.randomUUID(),
+            content: data.report,
+            modelUsed: "gemini-3-flash",
+          });
+        }
+      }
     } catch (e) {
       console.error("Summary generation failed", e);
     } finally {
@@ -333,6 +361,20 @@ export default function App() {
     setLoading(true);
     setAnalysis({ step: "parsing" });
 
+    const conversationId = crypto.randomUUID();
+    const promptMessageId = crypto.randomUUID();
+
+    if (typeof pendo !== "undefined") {
+      pendo.trackAgent("prompt", {
+        agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+        conversationId,
+        messageId: promptMessageId,
+        content: payload.text || (payload.image ? "[image uploaded]" : "[audio uploaded]"),
+        suggestedPrompt: false,
+        fileUploaded: !!(payload.image || payload.audio),
+      });
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort("TIMEOUT");
@@ -362,6 +404,16 @@ export default function App() {
          throw new Error("Agen tidak menemukan data barang.");
       }
       setAnalysis({ step: "complete", batchResult });
+
+      if (typeof pendo !== "undefined") {
+        pendo.trackAgent("agent_response", {
+          agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+          conversationId,
+          messageId: crypto.randomUUID(),
+          content: batchResult.summaryVoice || JSON.stringify(batchResult.items.map(i => i.productName)),
+          modelUsed: "gemini-3-flash",
+        });
+      }
       
       if (user) {
         await saveHistory(user.uid, {
@@ -1711,7 +1763,17 @@ export default function App() {
                        <p className="font-bold">{analysis.error || "Gagal Menganalisis Gambar"}</p>
                        <p className="text-xs opacity-50 px-10">{analysis.error ? "Klik tombol di bawah untuk mengulangi proses." : "Pastikan koneksi internet stabil dan gambar tidak terlalu gelap/buram."}</p>
                     </div>
-                    <button onClick={() => { setAnalysis(null); setMode(null); }} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm">Coba Lagi</button>
+                    <button onClick={() => {
+                      if (typeof pendo !== "undefined") {
+                        pendo.trackAgent("user_reaction", {
+                          agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+                          conversationId: crypto.randomUUID(),
+                          messageId: `retry_${Date.now()}`,
+                          content: "retry",
+                        });
+                      }
+                      setAnalysis(null); setMode(null);
+                    }} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm">Coba Lagi</button>
                  </div>
                )}
 
