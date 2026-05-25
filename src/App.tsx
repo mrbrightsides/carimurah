@@ -194,6 +194,20 @@ export default function App() {
         loadHistoryFromDB(u.uid);
         const p = await getUserProfile(u.uid);
         setProfile(p);
+        pendo.identify({
+          visitor: {
+            id: u.uid,
+            email: u.email || '',
+            full_name: u.displayName || '',
+            subscriptionTier: p?.subscription?.tier || 'FREE',
+            subscriptionExpiresAt: p?.subscription?.expiresAt || '',
+            preferencesCurrency: p?.preferences?.currency || 'IDR',
+            preferencesLanguage: p?.preferences?.language || 'id',
+            notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
+            b2bFocus: p?.preferences?.b2bFocus || 'price',
+            showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
+          }
+        });
       }
       else {
         const saved = localStorage.getItem("carimurah_history");
@@ -638,7 +652,7 @@ export default function App() {
                   >
                     <Settings className="w-5 h-5" />
                  </button>
-                 <button onClick={() => logout()} className="p-2 opacity-60 hover:opacity-100">
+                 <button onClick={() => { pendo.clearSession(); logout(); }} className="p-2 opacity-60 hover:opacity-100">
                     <LogOut className="w-5 h-5" />
                  </button>
                </div>
