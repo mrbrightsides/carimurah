@@ -16,6 +16,36 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: "150mb" }));
 
+// Simple logger for tracking
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.body && Object.keys(req.body).length > 0 && !req.url.includes("message")) {
+    // Avoid logging large message bodies for MCP
+    console.log("Body Summary:", Object.keys(req.body));
+  }
+  next();
+});
+
+// Health Check & Discovery
+app.get("/", (req, res) => {
+  res.json({
+    name: "CariMurah MCP Server",
+    status: "active",
+    endpoints: {
+      sse: "/sse",
+      message: "/message",
+      toolspec: "/toolspec.json",
+      openapi: "/openapi.json",
+      health: "/api/health"
+    },
+    service: "CariMurah.ai Agent Platform Integration"
+  });
+});
+
+app.get("/.well-known/mcp", (req, res) => {
+  res.redirect("/sse");
+});
+
 // --- MCP SSE Protocol Implementation ---
 const mcpSessions = new Map<string, express.Response>();
 
@@ -42,16 +72,23 @@ app.post("/message", async (req, res) => {
           tools: [
             {
               name: "get_user_profile",
-              description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB.",
+              description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB Atlas.",
               inputSchema: {
                 type: "object",
                 properties: { uid: { type: "string", description: "ID unik Firebase User" } },
                 required: ["uid"]
+              },
+              annotations: {
+                title: "Get User Profile",
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: true
               }
             },
             {
               name: "update_user_profile",
-              description: "Menyimpan atau memperbarui preferensi profil belanja user ke database MongoDB.",
+              description: "Menyimpan atau memperbarui preferensi profil belanja user (B2B focus, preference) ke database MongoDB.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -65,11 +102,18 @@ app.post("/message", async (req, res) => {
                   }
                 },
                 required: ["uid"]
+              },
+              annotations: {
+                title: "Update User Profile",
+                readOnlyHint: false,
+                destructiveHint: true,
+                idempotentHint: false,
+                openWorldHint: true
               }
             },
             {
               name: "process_analysis",
-              description: "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah.",
+              description: "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah di marketplace.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -78,20 +122,34 @@ app.post("/message", async (req, res) => {
                   is_b2b: { type: "boolean" }
                 },
                 required: ["text"]
+              },
+              annotations: {
+                title: "Process Shopping Analysis",
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: true
               }
             },
             {
               name: "get_user_history",
-              description: "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB.",
+              description: "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB Atlas.",
               inputSchema: {
                 type: "object",
                 properties: { uid: { type: "string" } },
                 required: ["uid"]
+              },
+              annotations: {
+                title: "Get User History",
+                readOnlyHint: true,
+                destructiveHint: false,
+                idempotentHint: true,
+                openWorldHint: true
               }
             },
             {
               name: "save_to_history",
-              description: "Menyimpan hasil temuan harga termurah ke riwayat permanen user di MongoDB.",
+              description: "Menyimpan hasil temuan harga termurah ke riwayat permanen user di MongoDB Atlas.",
               inputSchema: {
                 type: "object",
                 properties: {
@@ -107,6 +165,13 @@ app.post("/message", async (req, res) => {
                   }
                 },
                 required: ["uid", "product_data"]
+              },
+              annotations: {
+                title: "Save Finding to History",
+                readOnlyHint: false,
+                destructiveHint: true,
+                idempotentHint: false,
+                openWorldHint: true
               }
             }
           ]
@@ -158,17 +223,34 @@ app.post("/message", async (req, res) => {
 
 app.get("/sse", (req, res) => {
   const sessionId = uuidv4();
+  
+  // Set headers for SSE
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no"
   });
+
+  // Keep-alive comment sent every 15 seconds
+  const keepAlive = setInterval(() => {
+    res.write(": keep-alive\n\n");
+  }, 15000);
+
   const origin = req.headers.host?.includes("run.app") ? `https://${req.headers.host}` : `http://${req.headers.host}`;
   const endpointUrl = `${origin}/message?sessionId=${sessionId}`;
+  
+  // Initial endpoint event
   res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
+  
+  console.log(`[MCP] New SSE session created: ${sessionId}`);
   mcpSessions.set(sessionId, res);
-  req.on("close", () => mcpSessions.delete(sessionId));
+
+  req.on("close", () => {
+    console.log(`[MCP] SSE session closed: ${sessionId}`);
+    clearInterval(keepAlive);
+    mcpSessions.delete(sessionId);
+  });
 });
 
 // Helper for toolspec.json to paste in GCP
@@ -177,12 +259,13 @@ app.get("/toolspec.json", (req, res) => {
     tools: [
       {
         name: "get_user_profile",
-        description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB.",
-        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+        description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB Atlas.",
+        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
+        annotations: { title: "Get User Profile", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
       },
       {
         name: "update_user_profile",
-        description: "Menyimpan atau memperbarui preferensi profil belanja user ke database MongoDB.",
+        description: "Menyimpan atau memperbarui preferensi profil belanja user (B2B focus, preference) ke database MongoDB.",
         inputSchema: {
           type: "object",
           properties: {
@@ -190,21 +273,24 @@ app.get("/toolspec.json", (req, res) => {
             preferences: { type: "object", properties: { b2b_focus: { type: "string" }, is_b2b: { type: "boolean" } } }
           },
           required: ["uid"]
-        }
+        },
+        annotations: { title: "Update User Profile", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
       },
       {
         name: "process_analysis",
         description: "Menganalisis produk untuk mencari harga termurah di marketplace Indonesia.",
-        inputSchema: { type: "object", properties: { text: { type: "string" }, image: { type: "string" } }, required: ["text"] }
+        inputSchema: { type: "object", properties: { text: { type: "string" }, image: { type: "string" } }, required: ["text"] },
+        annotations: { title: "Process Shopping Analysis", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
       },
       {
         name: "get_user_history",
-        description: "Mengambil riwayat belanja user dari MongoDB.",
-        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+        description: "Mengambil riwayat belanja user dari MongoDB Atlas.",
+        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
+        annotations: { title: "Get User History", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
       },
       {
         name: "save_to_history",
-        description: "Simpan hasil belanja ke MongoDB.",
+        description: "Menyimpan hasil temuan harga termurah ke riwayat permanen user di MongoDB Atlas.",
         inputSchema: {
           type: "object",
           properties: {
@@ -218,21 +304,13 @@ app.get("/toolspec.json", (req, res) => {
             }
           },
           required: ["uid", "product_data"]
-        }
+        },
+        annotations: { title: "Save Finding to History", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
       }
     ]
   });
 });
 // --- End of MCP ---
-
-// Simple logger for Agent Builder tracking
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log("Body:", JSON.stringify(req.body, null, 2));
-  }
-  next();
-});
 
 // Serve OpenAPI Spec for Agent Builder Integration
 app.get("/openapi.json", (req, res) => {
@@ -492,7 +570,7 @@ app.post("/api/process", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3-flash",
       contents: [{ role: "user", parts }],
       config: {
         systemInstruction,
@@ -641,7 +719,7 @@ app.post("/api/monthly-summary", async (req, res) => {
     Analyze this and tell me how I did. My total savings this month is Rp${history.reduce((a: number, b: any) => a + b.totalSaved, 0).toLocaleString("id-ID")}.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3-flash",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         systemInstruction,
