@@ -41,20 +41,72 @@ app.post("/message", async (req, res) => {
         result: {
           tools: [
             {
-              name: "getUserProfile",
-              description: "Ambil preferensi belanja user dari MongoDB.",
-              inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+              name: "get_user_profile",
+              description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB.",
+              inputSchema: {
+                type: "object",
+                properties: { uid: { type: "string", description: "ID unik Firebase User" } },
+                required: ["uid"]
+              }
             },
             {
-              name: "saveToHistory",
-              description: "Simpan temuan harga termurah ke riwayat user di MongoDB.",
+              name: "update_user_profile",
+              description: "Menyimpan atau memperbarui preferensi profil belanja user ke database MongoDB.",
               inputSchema: {
                 type: "object",
                 properties: {
                   uid: { type: "string" },
-                  productData: { type: "object", properties: { productName: { type: "string" }, recommendedPrice: { type: "number" }, platform: { type: "string" }, totalSaved: { type: "number" } } }
+                  preferences: {
+                    type: "object",
+                    properties: {
+                      b2b_focus: { type: "string", enum: ["price", "delivery", "rating"] },
+                      is_b2b: { type: "boolean" }
+                    }
+                  }
                 },
-                required: ["uid", "productData"]
+                required: ["uid"]
+              }
+            },
+            {
+              name: "process_analysis",
+              description: "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  image: { type: "string" },
+                  is_b2b: { type: "boolean" }
+                },
+                required: ["text"]
+              }
+            },
+            {
+              name: "get_user_history",
+              description: "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB.",
+              inputSchema: {
+                type: "object",
+                properties: { uid: { type: "string" } },
+                required: ["uid"]
+              }
+            },
+            {
+              name: "save_to_history",
+              description: "Menyimpan hasil temuan harga termurah ke riwayat permanen user di MongoDB.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  uid: { type: "string" },
+                  product_data: {
+                    type: "object",
+                    properties: {
+                      product_name: { type: "string" },
+                      recommended_price: { type: "number" },
+                      platform: { type: "string" },
+                      total_saved: { type: "number" }
+                    }
+                  }
+                },
+                required: ["uid", "product_data"]
               }
             }
           ]
@@ -65,12 +117,38 @@ app.post("/message", async (req, res) => {
       const { name, arguments: args } = message.params;
       const { db } = await connectToDatabase();
       let result;
-      if (name === "getUserProfile") result = await db.collection("users").findOne({ uid: args.uid });
-      if (name === "saveToHistory") {
-        const r = await db.collection("history").insertOne({ ...args.productData, userId: args.uid, createdAt: new Date().toISOString() });
+      
+      if (name === "get_user_profile") {
+        result = await db.collection("users").findOne({ uid: args.uid });
+      } else if (name === "update_user_profile") {
+        await db.collection("users").updateOne(
+          { uid: args.uid },
+          { $set: { ...args.preferences, updatedAt: new Date().toISOString() } },
+          { upsert: true }
+        );
+        result = { success: true };
+      } else if (name === "get_user_history") {
+        const history = await db.collection("history").find({ userId: args.uid }).sort({ date: -1 }).limit(20).toArray();
+        result = history.map(h => ({ ...h, id: h._id.toString() }));
+      } else if (name === "save_to_history") {
+        const r = await db.collection("history").insertOne({
+          ...args.product_data,
+          userId: args.uid,
+          createdAt: new Date().toISOString()
+        });
         result = { success: true, id: r.insertedId.toString() };
+      } else if (name === "process_analysis") {
+        // Mocking the call to internal logic
+        result = { status: "processing", message: "Gunakan API endpoint utama untuk analisis mendalam dengan Gemini." };
       }
-      return res.json({ jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: JSON.stringify(result || { status: "not_found" }) }] } });
+
+      return res.json({
+        jsonrpc: "2.0", 
+        id: message.id, 
+        result: { 
+          content: [{ type: "text", text: JSON.stringify(result || { status: "not_found" }) }] 
+        } 
+      });
     }
     res.json({ jsonrpc: "2.0", id: message.id, result: {} });
   } catch (error: any) {
@@ -80,11 +158,64 @@ app.post("/message", async (req, res) => {
 
 app.get("/sse", (req, res) => {
   const sessionId = uuidv4();
-  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" });
-  const endpointUrl = new URL(req.url, `https://${req.headers.host}`).origin + `/message?sessionId=${sessionId}`;
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+  const origin = req.headers.host?.includes("run.app") ? `https://${req.headers.host}` : `http://${req.headers.host}`;
+  const endpointUrl = `${origin}/message?sessionId=${sessionId}`;
   res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
   mcpSessions.set(sessionId, res);
   req.on("close", () => mcpSessions.delete(sessionId));
+});
+
+// Helper for toolspec.json to paste in GCP
+app.get("/toolspec.json", (req, res) => {
+  res.json({
+    tools: [
+      {
+        name: "get_user_profile",
+        description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB.",
+        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+      },
+      {
+        name: "update_user_profile",
+        description: "Menyimpan atau memperbarui preferensi profil belanja user ke database MongoDB.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            uid: { type: "string" },
+            preferences: { type: "object", properties: { b2b_focus: { type: "string" }, is_b2b: { type: "boolean" } } }
+          },
+          required: ["uid"]
+        }
+      },
+      {
+        name: "process_analysis",
+        description: "Menganalisis produk untuk mencari harga termurah di marketplace Indonesia.",
+        inputSchema: { type: "object", properties: { text: { type: "string" }, image: { type: "string" } }, required: ["text"] }
+      },
+      {
+        name: "get_user_history",
+        description: "Mengambil riwayat belanja user dari MongoDB.",
+        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] }
+      },
+      {
+        name: "save_to_history",
+        description: "Simpan hasil belanja ke MongoDB.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            uid: { type: "string" },
+            product_data: { type: "object", properties: { product_name: { type: Type.STRING }, recommended_price: { type: Type.NUMBER } } }
+          },
+          required: ["uid", "product_data"]
+        }
+      }
+    ]
+  });
 });
 // --- End of MCP ---
 
