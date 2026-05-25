@@ -7,69 +7,19 @@
   },
   "servers": [
     {
+      "url": "https://ais-pre-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
+      "description": "Shared App Server (AIS Preview)"
+    },
+    {
       "url": "https://carimurah-ai-875241790017.europe-west1.run.app",
       "description": "Production Server (Cloud Run)"
+    },
+    {
+      "url": "https://ais-dev-7xkvumwn2pakj7laysavzs-111006670209.asia-southeast1.run.app",
+      "description": "Development Server (AIS)"
     }
   ],
   "paths": {
-    "/api/health": {
-      "get": {
-        "summary": "Check API health",
-        "operationId": "checkHealth",
-        "responses": {
-          "200": {
-            "description": "Server is healthy",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": { "type": "string" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/process": {
-      "post": {
-        "summary": "Run agentic shopping analysis",
-        "operationId": "processAnalysis",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "text": { "type": "string", "description": "User query or prompt" },
-                  "image": { "type": "string", "description": "Base64 image string of receipt/invoice" },
-                  "isB2B": { "type": "boolean", "description": "Flag for procurement features" }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Analysis result successfully generated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean" },
-                    "message": { "type": "string", "description": "The final response message from CariMurah engine" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/profile/{uid}": {
       "get": {
         "summary": "Get user profile",
@@ -105,7 +55,6 @@
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/UserProfile" }
@@ -113,21 +62,20 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Success"
-          }
+          "200": { "description": "Success" }
         }
       }
     },
     "/api/history": {
       "get": {
-        "summary": "Get user shopping history",
-        "operationId": "getHistory",
+        "summary": "Get generic or global shopping history",
+        "description": "Returns a list of recent shopping analysis items. useful for getting trends or samples.",
+        "operationId": "getGlobalHistory",
         "parameters": [
           {
             "name": "uid",
             "in": "query",
-            "description": "The user ID. If not provided, returns a sample/generic history for testing.",
+            "description": "Optional user ID to filter history",
             "required": false,
             "schema": { "type": "string" }
           }
@@ -146,6 +94,137 @@
           }
         }
       }
+    },
+    "/api/history/{uid}": {
+      "get": {
+        "summary": "Get specific user shopping history",
+        "description": "Returns all saved items for a specific User ID from MongoDB.",
+        "operationId": "getUserHistory",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User history data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/HistoryItem" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save item to user history",
+        "description": "Adds a new analyzed product item to the user's MongoDB history collection.",
+        "operationId": "saveToHistory",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/HistoryItemCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "id": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/{uid}/{historyId}": {
+      "patch": {
+        "summary": "Update a history item",
+        "description": "Modify details of a specific saved history item in MongoDB.",
+        "operationId": "updateHistoryItem",
+        "parameters": [
+          {
+            "name": "uid",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "historyId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Check API health",
+        "operationId": "checkHealth",
+        "responses": {
+          "200": {
+            "description": "Server is healthy",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "properties": { "status": { "type": "string" } } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/process": {
+      "post": {
+        "summary": "Run agentic shopping analysis",
+        "operationId": "processAnalysis",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "image": { "type": "string", "description": "Base64 image string" },
+                  "isB2B": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Analysis result" }
+        }
+      }
     }
   },
   "components": {
@@ -161,10 +240,10 @@
             "type": "object",
             "properties": {
               "tier": { "type": "string", "enum": ["FREE", "PRO", "ENTERPRISE"] }
+            }
           }
         }
-      }
-    },
+      },
       "HistoryItem": {
         "type": "object",
         "properties": {
@@ -173,7 +252,23 @@
           "date": { "type": "string" },
           "itemsCount": { "type": "integer" },
           "totalSaved": { "type": "number" },
-          "type": { "type": "string", "enum": ["B2C", "B2B"] }
+          "type": { "type": "string", "enum": ["B2C", "B2B"] },
+          "productName": { "type": "string" },
+          "brand": { "type": "string" },
+          "recommendedPrice": { "type": "number" },
+          "platform": { "type": "string" }
+        }
+      },
+      "HistoryItemCreate": {
+        "type": "object",
+        "required": ["productName", "brand", "recommendedPrice", "platform"],
+        "properties": {
+          "productName": { "type": "string" },
+          "brand": { "type": "string" },
+          "recommendedPrice": { "type": "number" },
+          "platform": { "type": "string" },
+          "totalSaved": { "type": "number" },
+          "type": { "type": "string", "default": "B2C" }
         }
       }
     }
