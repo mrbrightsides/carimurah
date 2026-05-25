@@ -87,13 +87,6 @@ app.post("/mcp/message", async (req, res) => {
                 type: "object",
                 properties: { uid: { type: "string", description: "ID unik Firebase User" } },
                 required: ["uid"]
-              },
-              annotations: {
-                title: "Get User Profile",
-                readOnlyHint: true,
-                destructiveHint: false,
-                idempotentHint: true,
-                openWorldHint: true
               }
             },
             {
@@ -112,13 +105,6 @@ app.post("/mcp/message", async (req, res) => {
                   }
                 },
                 required: ["uid"]
-              },
-              annotations: {
-                title: "Update User Profile",
-                readOnlyHint: false,
-                destructiveHint: true,
-                idempotentHint: false,
-                openWorldHint: true
               }
             },
             {
@@ -132,13 +118,6 @@ app.post("/mcp/message", async (req, res) => {
                   is_b2b: { type: "boolean" }
                 },
                 required: ["text"]
-              },
-              annotations: {
-                title: "Process Shopping Analysis",
-                readOnlyHint: true,
-                destructiveHint: false,
-                idempotentHint: true,
-                openWorldHint: true
               }
             },
             {
@@ -148,13 +127,6 @@ app.post("/mcp/message", async (req, res) => {
                 type: "object",
                 properties: { uid: { type: "string" } },
                 required: ["uid"]
-              },
-              annotations: {
-                title: "Get User History",
-                readOnlyHint: true,
-                destructiveHint: false,
-                idempotentHint: true,
-                openWorldHint: true
               }
             },
             {
@@ -175,13 +147,6 @@ app.post("/mcp/message", async (req, res) => {
                   }
                 },
                 required: ["uid", "product_data"]
-              },
-              annotations: {
-                title: "Save Finding to History",
-                readOnlyHint: false,
-                destructiveHint: true,
-                idempotentHint: false,
-                openWorldHint: true
               }
             }
           ]
@@ -277,8 +242,13 @@ app.get("/mcp/toolspec.json", (req, res) => {
       {
         name: "get_user_profile",
         description: "Mengambil preferensi belanja user (B2B/B2C, fokus harga/rating) dan status langganan dari MongoDB Atlas.",
-        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
-        annotations: { title: "Get User Profile", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+        inputSchema: {
+          type: "object",
+          properties: {
+            uid: { type: "string", description: "ID unik Firebase User" }
+          },
+          required: ["uid"]
+        }
       },
       {
         name: "update_user_profile",
@@ -286,24 +256,41 @@ app.get("/mcp/toolspec.json", (req, res) => {
         inputSchema: {
           type: "object",
           properties: {
-            uid: { type: "string" },
-            preferences: { type: "object", properties: { b2b_focus: { type: "string" }, is_b2b: { type: "boolean" } } }
+            uid: { type: "string", description: "ID unik Firebase User" },
+            preferences: {
+              type: "object",
+              properties: {
+                b2b_focus: { type: "string", enum: ["price", "delivery", "rating"] },
+                is_b2b: { type: "boolean" }
+              }
+            }
           },
           required: ["uid"]
-        },
-        annotations: { title: "Update User Profile", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
+        }
       },
       {
         name: "process_analysis",
-        description: "Menganalisis produk untuk mencari harga termurah di marketplace Indonesia.",
-        inputSchema: { type: "object", properties: { text: { type: "string" }, image: { type: "string" } }, required: ["text"] },
-        annotations: { title: "Process Shopping Analysis", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+        description: "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah di marketplace.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: { type: "string", description: "Nama produk atau deskripsi barang yang ingin dicari." },
+            image: { type: "string", description: "Opsional: String base64 gambar produk atau struk belanja." },
+            is_b2b: { type: "boolean", description: "Setel true jika ingin mencari harga grosir/partai besar." }
+          },
+          required: ["text"]
+        }
       },
       {
         name: "get_user_history",
-        description: "Mengambil riwayat belanja user dari MongoDB Atlas.",
-        inputSchema: { type: "object", properties: { uid: { type: "string" } }, required: ["uid"] },
-        annotations: { title: "Get User History", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+        description: "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB Atlas.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            uid: { type: "string", description: "ID unik Firebase User" }
+          },
+          required: ["uid"]
+        }
       },
       {
         name: "save_to_history",
@@ -311,18 +298,19 @@ app.get("/mcp/toolspec.json", (req, res) => {
         inputSchema: {
           type: "object",
           properties: {
-            uid: { type: "string" },
-            product_data: { 
-              type: "object", 
-              properties: { 
-                product_name: { type: "string" }, 
-                recommended_price: { type: "number" } 
-              } 
+            uid: { type: "string", description: "ID unik Firebase User" },
+            product_data: {
+              type: "object",
+              properties: {
+                product_name: { type: "string" },
+                recommended_price: { type: "number" },
+                platform: { type: "string" },
+                total_saved: { type: "number" }
+              }
             }
           },
           required: ["uid", "product_data"]
-        },
-        annotations: { title: "Save Finding to History", readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true }
+        }
       }
     ]
   });

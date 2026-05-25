@@ -9,13 +9,6 @@
           "uid": { "type": "string", "description": "ID unik Firebase User" }
         },
         "required": ["uid"]
-      },
-      "annotations": {
-        "title": "Get User Profile",
-        "readOnlyHint": true,
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": true
       }
     },
     {
@@ -34,32 +27,31 @@
           }
         },
         "required": ["uid"]
-      },
-      "annotations": { "title": "Update User Profile", "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true }
+      }
     },
     {
       "name": "process_analysis",
-      "description": "Menganalisis teks atau gambar produk untuk mencari harga termurah di marketplace.",
+      "description": "Alur kerja utama agen: Menganalisis teks atau gambar produk untuk mencari harga termurah di marketplace.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "text": { "type": "string", "description": "Nama produk atau deskripsi barang yang ingin dicari." },
-          "image": { "type": "string", "description": "Base64 gambar produk atau struk belanja." },
+          "image": { "type": "string", "description": "Opsional: String base64 gambar produk atau struk belanja." },
           "is_b2b": { "type": "boolean", "description": "Setel true jika ingin mencari harga grosir/partai besar." }
         },
         "required": ["text"]
-      },
-      "annotations": { "title": "Process Shopping Analysis", "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true }
+      }
     },
     {
       "name": "get_user_history",
       "description": "Mengambil daftar riwayat hasil analisis belanja yang pernah disimpan user di MongoDB Atlas.",
       "inputSchema": {
         "type": "object",
-        "properties": { "uid": { "type": "string", "description": "ID unik Firebase User" } },
+        "properties": {
+          "uid": { "type": "string", "description": "ID unik Firebase User" }
+        },
         "required": ["uid"]
-      },
-      "annotations": { "title": "Get User History", "readOnlyHint": true, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true }
+      }
     },
     {
       "name": "save_to_history",
@@ -79,8 +71,7 @@
           }
         },
         "required": ["uid", "product_data"]
-      },
-      "annotations": { "title": "Save Finding to History", "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true }
+      }
     }
   ]
 }
