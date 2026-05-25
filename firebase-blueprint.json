@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User preferences and profile data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "preferences": {
+          "type": "object",
+          "properties": {
+            "currency": { "type": "string" },
+            "language": { "type": "string" },
+            "notifyOnBetterPrices": { "type": "boolean" },
+            "b2bFocus": { "type": "string", "enum": ["price", "delivery", "rating"] }
+          }
+        }
+      },
+      "required": ["uid"]
+    },
+    "HistoryItem": {
+      "title": "History Item",
+      "description": "A saved analysis result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "totalSaved": { "type": "number" },
+        "itemsCount": { "type": "number" },
+        "type": { "type": "string", "enum": ["B2C", "B2B"] },
+        "result": { "type": "object" }
+      },
+      "required": ["id", "date", "totalSaved", "itemsCount", "type", "result"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": "HistoryItem",
+      "description": "User analysis history"
+    }
+  }
+}
