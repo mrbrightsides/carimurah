@@ -1,0 +1,11 @@
+{
+  "name": "CariMurah.ai",
+  "description": "Asisten belanja cerdas berbasis Multi-Agent untuk mencari harga termurah melalui foto, suara, dan nota.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
