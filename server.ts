@@ -26,24 +26,34 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health Check & Discovery
-app.get("/", (req, res) => {
+// MCP Discovery & Health
+app.get("/mcp/info", (req, res) => {
+  const host = req.headers.host || "localhost:3000";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
+
   res.json({
     name: "CariMurah MCP Server",
     status: "active",
+    protocol: "SSE",
     endpoints: {
-      sse: "/sse",
-      message: "/message",
-      toolspec: "/toolspec.json",
-      openapi: "/openapi.json",
-      health: "/api/health"
+      sse: `${baseUrl}/sse`,
+      message: `${baseUrl}/message`,
+      toolspec: `${baseUrl}/toolspec.json`,
+      openapi: `${baseUrl}/openapi.json`,
+      health: `${baseUrl}/api/health`
     },
+    capabilities: ["tools", "resources"],
     service: "CariMurah.ai Agent Platform Integration"
   });
 });
 
 app.get("/.well-known/mcp", (req, res) => {
   res.redirect("/sse");
+});
+
+app.get("/mcp", (req, res) => {
+  res.redirect("/mcp/info");
 });
 
 // --- MCP SSE Protocol Implementation ---
@@ -224,26 +234,33 @@ app.post("/message", async (req, res) => {
 app.get("/sse", (req, res) => {
   const sessionId = uuidv4();
   
-  // Set headers for SSE
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no"
-  });
+  // Set headers for SSE with explicit CORS and no-cache
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-Accel-Buffering", "no");
 
-  // Keep-alive comment sent every 15 seconds
+  res.flushHeaders();
+
+  // Keep-alive comment sent every 15 seconds to prevent timeout
   const keepAlive = setInterval(() => {
+    if (res.writableEnded) {
+      clearInterval(keepAlive);
+      return;
+    }
     res.write(": keep-alive\n\n");
   }, 15000);
 
-  const origin = req.headers.host?.includes("run.app") ? `https://${req.headers.host}` : `http://${req.headers.host}`;
-  const endpointUrl = `${origin}/message?sessionId=${sessionId}`;
+  const host = req.headers.host || "localhost:3000";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const baseUrl = `${protocol}://${host}`;
+  const endpointUrl = `${baseUrl}/message?sessionId=${sessionId}`;
   
-  // Initial endpoint event
+  // Initial endpoint event - MUST be exactly this format for discovery
   res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
   
-  console.log(`[MCP] New SSE session created: ${sessionId}`);
+  console.log(`[MCP] New SSE session created: ${sessionId} for ${host}`);
   mcpSessions.set(sessionId, res);
 
   req.on("close", () => {
@@ -751,7 +768,16 @@ async function setupVite() {
 }
 
 setupVite().then(() => {
+  // 404 Catch-all for API and MCP routes only
+  app.use((req, res, next) => {
+    if (req.url.startsWith("/api") || req.url.startsWith("/mcp") || ["/sse", "/message", "/toolspec.json"].includes(req.url)) {
+      console.warn(`[404] Not Found: ${req.method} ${req.url}`);
+      return res.status(404).json({ error: "Endpoint not found on CariMurah MCP Server" });
+    }
+    next();
+  });
+
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 });
