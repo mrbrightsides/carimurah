@@ -64,7 +64,8 @@ export const loginWithGoogle = async () => {
     const userRef = doc(db, 'users', user.uid);
     const userSnap = await getDoc(userRef);
     
-    if (!userSnap.exists()) {
+    const isNewUser = !userSnap.exists();
+    if (isNewUser) {
       const profile: UserProfile = {
         uid: user.uid,
         displayName: user.displayName,
@@ -83,6 +84,17 @@ export const loginWithGoogle = async () => {
       };
       await setDoc(userRef, profile);
     }
+
+    if (typeof window !== "undefined" && window.pendo) {
+      window.pendo.track("user_login_completed", {
+        auth_provider: "google",
+        is_new_user: isNewUser,
+        default_tier: "FREE",
+        default_currency: "IDR",
+        default_language: "id"
+      });
+    }
+
     return user;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'users');
