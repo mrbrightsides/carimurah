@@ -58,7 +58,7 @@ import {
 } from "lucide-react";
 import Markdown from "react-markdown";
 import type { InputMode, AnalysisState, BatchAnalysisResult, HistoryItem, UserProfile, ItemAnalysis, MarketOption } from "./types";
-import { auth, loginWithGoogle, logout, saveHistory, getHistory, getUserProfile, updateProfile, deleteHistoryItems, updateHistoryItem } from "./lib/mongodb_client";
+import { auth, loginWithGoogle as firebaseLoginWithGoogle, logout as firebaseLogout, saveHistory, getHistory, getUserProfile, updateProfile, deleteHistoryItems, updateHistoryItem } from "./lib/mongodb_client";
 import { onAuthStateChanged, User } from "firebase/auth";
 
 function CountingNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
@@ -180,6 +180,71 @@ export default function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [monthlySummary, setMonthlySummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  
+  // Sandbox login states for preview-safe authentication
+  const [showSandboxLogin, setShowSandboxLogin] = useState(false);
+  const [sandboxEmail, setSandboxEmail] = useState("khudri@binadarma.ac.id");
+  const [sandboxName, setSandboxName] = useState("Khudri");
+
+  const handleLoginClick = async () => {
+    try {
+      await firebaseLoginWithGoogle();
+    } catch (err: any) {
+      console.error("Login with Google failed:", err);
+      // Automatically fallback to sandbox login modal
+      setShowSandboxLogin(true);
+    }
+  };
+
+  const handleSandboxLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sandboxEmail) return;
+    const mockUid = "sandbox-" + btoa(sandboxEmail).replace(/=/g, "").toLowerCase();
+    const mockUser = {
+      uid: mockUid,
+      email: sandboxEmail,
+      displayName: sandboxName || "User Demo",
+      photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=" + sandboxName,
+      emailVerified: true,
+      metadata: {},
+      providerData: []
+    };
+    
+    setUser(mockUser as any);
+    localStorage.setItem("carimurah_sandbox_user", JSON.stringify(mockUser));
+    
+    // Fetch profile and history from database
+    loadHistoryFromDB(mockUid);
+    const p = await getUserProfile(mockUid);
+    setProfile(p || { 
+      uid: mockUid, 
+      displayName: sandboxName || "User Demo", 
+      email: sandboxEmail,
+      photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=" + sandboxName,
+      subscription: { tier: "FREE", expiresAt: "" },
+      preferences: {
+        currency: "IDR",
+        language: "id",
+        notifyOnBetterPrices: true,
+        b2bFocus: "price",
+        showTrendChartsByDefault: false
+      }
+    });
+    
+    setShowSandboxLogin(false);
+  };
+
+  const handleLogoutClick = async () => {
+    localStorage.removeItem("carimurah_sandbox_user");
+    setUser(null);
+    setProfile(DEFAULT_GUEST_PROFILE);
+    setHistory([]);
+    try {
+      await firebaseLogout();
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Chat Agent State
   const [chatMessages, setChatMessages] = useState<Array<{ text: string; role: "user" | "assistant"; id: string; toolCalls?: string[] }>>([
@@ -285,6 +350,21 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
+    const savedSandboxUser = localStorage.getItem("carimurah_sandbox_user");
+    if (savedSandboxUser) {
+      try {
+        const u = JSON.parse(savedSandboxUser);
+        setUser(u);
+        loadHistoryFromDB(u.uid);
+        getUserProfile(u.uid).then((p) => {
+          setProfile(p || { ...DEFAULT_GUEST_PROFILE, uid: u.uid, displayName: u.displayName || "User", email: u.email });
+        });
+        return; // skip Firebase listener if sandbox active
+      } catch (e) {
+        localStorage.removeItem("carimurah_sandbox_user");
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -917,7 +997,7 @@ export default function App() {
                   >
                     <Settings className="w-5 h-5" />
                  </button>
-                 <button onClick={() => logout()} className="p-2 opacity-60 hover:opacity-100">
+                 <button onClick={handleLogoutClick} className="p-2 opacity-60 hover:opacity-100">
                     <LogOut className="w-5 h-5" />
                  </button>
                </div>
@@ -932,7 +1012,7 @@ export default function App() {
                   >
                     <Settings className="w-5 h-5" />
                  </button>
-                 <button onClick={() => loginWithGoogle()} className="p-2 opacity-60 hover:opacity-100">
+                 <button onClick={handleLoginClick} className="p-2 opacity-60 hover:opacity-100">
                     <LogIn className="w-5 h-5" />
                  </button>
                </div>
@@ -953,7 +1033,7 @@ export default function App() {
                {!user && (
                  <div className="p-6 rounded-3xl bg-amber-50 border border-amber-100 text-amber-900 flex flex-col items-center gap-4">
                     <p className="text-sm font-medium text-center">Login untuk sinkronkan riwayat belanja Anda di cloud.</p>
-                    <button onClick={loginWithGoogle} className="bg-amber-600 text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
+                    <button onClick={handleLoginClick} className="bg-amber-600 text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                        <LogIn className="w-4 h-4" /> Login Sekarang
                     </button>
                  </div>
@@ -2674,6 +2754,76 @@ export default function App() {
 
       {/* Bulk Delete Confirmation Modal */}
       <AnimatePresence>
+        {showSandboxLogin && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-left space-y-6`}
+            >
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500 mb-2">
+                    Sandbox Mode (Cloud Connected)
+                  </div>
+                  <h3 className="text-2xl font-black tracking-tight dialog-title">Login Cloud Safe</h3>
+                  <p className="text-xs opacity-60 leading-relaxed">
+                    Karena aplikasi berjalan di domain preview AI Studio, Firebase Auth membatasi login pop-up Google. Masukkan email Anda untuk langsung tersambung dan sync data ke **MongoDB Atlas** Anda!
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleSandboxLoginSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Alamat Email Anda</label>
+                  <input 
+                    type="email" 
+                    value={sandboxEmail}
+                    onChange={(e) => setSandboxEmail(e.target.value)}
+                    required
+                    placeholder="nama@email.com"
+                    className={`w-full px-4 py-3 rounded-xl font-bold text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isB2B ? "bg-white/5 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-900"}`}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Nama Lengkap</label>
+                  <input 
+                    type="text" 
+                    value={sandboxName}
+                    onChange={(e) => setSandboxName(e.target.value)}
+                    required
+                    placeholder="Contoh: Khudri"
+                    className={`w-full px-4 py-3 rounded-xl font-bold text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isB2B ? "bg-white/5 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-900"}`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <button 
+                    type="button"
+                    onClick={() => setShowSandboxLogin(false)}
+                    className={`py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 hover:bg-white/10" : "bg-slate-100 hover:bg-slate-200"}`}
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    type="submit"
+                    className="py-3.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-indigo-500/20"
+                  >
+                    Masuk Sandbox
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showDeleteConfirm && (
           <motion.div 
             initial={{ opacity: 0 }}
