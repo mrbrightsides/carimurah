@@ -1,10 +1,10 @@
-# 🚀 CariMurah.ai: SaaS Blueprint v2.0 (The Autonomous Procurement Engine)
+# 🚀 CariMurah.ai: SaaS Blueprint v2.1 (The Autonomous Procurement Engine)
 
 CariMurah.ai is a high-sophistication, multi-agent AI system designed to disrupt the e-commerce and wholesale landscape in Indonesia. From retail hunters (B2C Smart Savers) to enterprise procurement squads (B2B Procurement), we turn raw visual, voice, and text data into autonomous profit engines.
 
 ---
 
-## 💎 Monetization Strategy & Tiering (v2.0)
+## 💎 Monetization Strategy & Tiering (v2.1)
 
 ### 🥉 Free Tier (B2C Massal)
 *   **Target**: General consumers.
@@ -28,7 +28,7 @@ CariMurah.ai is a high-sophistication, multi-agent AI system designed to disrupt
 
 ---
 
-## 🛠️ v2.0 Core Ecosystem Capabilities
+## 🛠️ v2.1 Core Ecosystem Capabilities
 
 ### 🧠 Predictive AI Cycle Engine
 Our agents don't just read the price today—they analyze historical data cycles. 
@@ -43,14 +43,20 @@ Specially tuned for Indonesian supply chains:
 Businesses can upload bulk photos of old physical receipts. The AI performs an automated audit:
 *"You usually buy Ingredient A at Supplier X, but Supplier Y was 20% cheaper last month. Move 100% of volume to Supplier Y next month for Rp5.200.000 annual saving."*
 
+### 🔄 In-App Autonomous Agent with MCP
+Our integrated conversational agent uses **Model Context Protocol (MCP)** to interact directly with MongoDB. It can dynamically query your procurement history, adjust your B2B preferences, and perform pricing audits.
+
 ---
 
 ## 🏗️ Technical Stack (Autonomous Multi-Agent)
-*   **Intelligence**: Google Gemini 3.5 Flash (Agentic Reasoning & Multi-Modal Vision)
+*   **Intelligence**: Google Gemini 3.5 Flash (Agentic Reasoning & Multi-Modal Vision via the `@google/genai` modern SDK)
+*   **Agent Protocol**: **Model Context Protocol (MCP)** inside Node.js for bridging database operations with AI tools.
 *   **Frontend**: React 18 / Vite / Tailwind CSS / Motion (Fluid Transitions)
-*   **Backend**: Node.js / Express (Server-Side Proxy for API Security)
+*   **Backend**: Node.js / Express (Server-Side Proxy for API Security & Database Integration)
+*   **Database**: **MongoDB Atlas** (Highly secure NoSQL database tracking user profiles, preferences, and analysis history)
+*   **Authentication**: **Firebase Authentication** (Google Sign-In integration for secure cloud profiles)
+*   **Presence & Guest Flow**: Seamless local state fallback using `localStorage` for anonymous guest users, syncable immediately upon Google login.
 *   **Voice**: High-fidelity Web Speech API Integration
-*   **Architecture**: Full-stack Cloud Run deployment with Firebase Auth/Firestore.
 
 ---
 
