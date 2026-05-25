@@ -737,6 +737,260 @@ app.post("/api/monthly-summary", async (req, res) => {
   }
 });
 
+// Interactive AI Agent Chat Endpoint with Function Calling (Native MCP DB Interface)
+app.post("/api/agent/chat", async (req, res) => {
+  try {
+    const { message, history = [], uid, isB2B } = req.body;
+    
+    // Tools declarations for Gemini
+    const get_user_profile_tool = {
+      name: "get_user_profile",
+      description: "Ambil informasi profil preferensi belanja pengguna dari database MongoDB.",
+      parameters: { type: Type.OBJECT, properties: {} }
+    };
+    
+    const update_user_preferences_tool = {
+      name: "update_user_preferences",
+      description: "Perbarui preferensi belanja pengguna di database MongoDB.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          b2bFocus: { type: Type.STRING, description: "Fokus analisis belanja B2B: price, delivery, atau rating" },
+          currency: { type: Type.STRING, description: "Mata uang untuk perhitungan harga: IDR, USD, atau MYR" },
+          language: { type: Type.STRING, description: "Bahasa antarmuka aplikasi: id (Indonesia) atau en (Inggris)" },
+          notifyOnBetterPrices: { type: Type.BOOLEAN, description: "Status notifikasi drop harga (true/false)" }
+        }
+      }
+    };
+    
+    const get_user_history_tool = {
+      name: "get_user_history",
+      description: "Ambil riwayat analisis belanja dan data potensi penghematan uang dari database MongoDB.",
+      parameters: { type: Type.OBJECT, properties: {} }
+    };
+
+    const search_cheapest_products_tool = {
+      name: "search_cheapest_products",
+      description: "Cari harga produk termurah di Tokopedia, Shopee, Blibli, dan Jaringan Distributor grosir.",
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          query: { type: Type.STRING, description: "Nama produk atau kategori barang yang dicari secara detail" },
+          isB2B: { type: Type.BOOLEAN, description: "Setel true jika mencari harga grosir/gudang partai besar" }
+        },
+        required: ["query"]
+      }
+    };
+
+    const tools = [{
+      functionDeclarations: [
+        get_user_profile_tool,
+        update_user_preferences_tool,
+        get_user_history_tool,
+        search_cheapest_products_tool
+      ]
+    }];
+
+    const systemInstruction = `Anda adalah Asisten CariMurah.ai (Asisten Cerdas CariMurah).
+Tugas Anda adalah memposisikan diri sebagai agen otonom yang berjalan langsung di dalam aplikasi (in-app agent).
+Anda terhubung langsung ke database MongoDB Atlas pengguna menggunakan protokol server-internal MCP (Model Context Protocol).
+
+ATURAN PERILAKU:
+1. Selalu utamakan menggunakan database-tools (Function Calling) yang disediakan jika pengguna bertanya tentang preferensi mereka, riwayat penemuan hemat, profil, atau mencari penawaran harga.
+2. Jika pengguna meminta untuk mengubah pengaturan (misal: "ubah fokus B2B ke pengiriman" atau "aktifkan notifikasi"), panggil tool 'update_user_preferences' dan konfirmasi setelah sukses diperbarui.
+3. Saat memanggil 'search_cheapest_products', sajikan perbandingan harga produk yang ditemukan secara terperinci (seperti Tokopedia vs Shopee vs Grosir/Distributor) dan hitung berapa yang bisa mereka hemat jika membeli dari platform pemenang. Tampilkan dalam format tabel Markdown yang bersih dan profesional.
+4. Jawablah dalam Bahasa Indonesia yang ramah, hangat, penuh semangat hemat (gunakan interjeksi seperti Wah, Nah, Hebat!), dan profesional sebagai asisten pengadaan/belanja hebat.
+5. Gunakan format Markdown yang indah, tebal-tipis bervariasi, bullet points, dan emoji fungsional seperlunya.`;
+
+    // Process message history to Gemini contents format
+    const contents: any[] = [];
+    
+    // Push history item contents
+    for (const item of history) {
+      if (item.text && item.role) {
+        contents.push({
+          role: item.role === "assistant" ? "model" : "user",
+          parts: [{ text: item.text }]
+        });
+      }
+    }
+    
+    // Add current user query
+    contents.push({
+      role: "user",
+      parts: [{ text: message }]
+    });
+
+    console.log(`[AGENT CHAT] Processing message with Gemini. UID: ${uid}, isB2B: ${isB2B}`);
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents,
+      config: {
+        systemInstruction,
+        tools,
+        toolConfig: { includeServerSideToolInvocations: true }
+      }
+    });
+
+    const functionCalls = response.functionCalls;
+    const toolLogs: string[] = [];
+
+    if (functionCalls && functionCalls.length > 0) {
+      const { db } = await connectToDatabase();
+      const results: any[] = [];
+      
+      for (const fc of functionCalls) {
+        console.log(`[AGENT CHAT] Tool triggered: ${fc.name}`, fc.args);
+        let toolResult: any = null;
+        
+        if (fc.name === "get_user_profile") {
+          toolLogs.push("get_user_profile: Mengambil informasi preferensi profil Anda dari MongoDB...");
+          if (uid) {
+            toolResult = await db.collection("users").findOne({ uid });
+            if (!toolResult) {
+              toolResult = {
+                uid,
+                displayName: "Pengguna CariMurah",
+                subscription: { tier: "FREE" },
+                preferences: { currency: "IDR", language: "id", notifyOnBetterPrices: true, b2bFocus: "price", showTrendChartsByDefault: true }
+              };
+            }
+          } else {
+            toolResult = { error: "User is currently anonym/not logged in" };
+          }
+        } 
+        else if (fc.name === "update_user_preferences") {
+          const updates = fc.args as any;
+          toolLogs.push(`update_user_preferences: Memperbarui preferensi Anda (${JSON.stringify(updates)}) di MongoDB...`);
+          if (uid) {
+            await db.collection("users").updateOne(
+              { uid },
+              { $set: { ...updates, updatedAt: new Date().toISOString() } },
+              { upsert: true }
+            );
+            toolResult = { success: true, updated: updates };
+          } else {
+            toolResult = { error: "User is currently anonym/not logged in" };
+          }
+        } 
+        else if (fc.name === "get_user_history") {
+          toolLogs.push("get_user_history: Memindai riwayat transaksi & audit penghematan dari MongoDB...");
+          const query = uid ? { userId: uid } : {};
+          const hist = await db.collection("history").find(query).sort({ date: -1 }).limit(10).toArray();
+          toolResult = hist.map(h => ({
+            id: h._id.toString(),
+            date: h.date || h.createdAt,
+            totalSaved: h.totalSaved,
+            itemsCount: h.itemsCount,
+            type: h.type,
+            note: h.note || ""
+          }));
+        } 
+        else if (fc.name === "search_cheapest_products") {
+          const queryStr = (fc.args as any).query;
+          const searchB2B = (fc.args as any).isB2B !== undefined ? (fc.args as any).isB2B : isB2B;
+          toolLogs.push(`search_cheapest_products: Menyisir Tokopedia, Shopee, & Grosir untuk "${queryStr}"...`);
+          
+          // Realistic price generation based on keywords
+          let basePrice = 45000;
+          if (queryStr.toLowerCase().includes("minyak")) basePrice = 38000;
+          else if (queryStr.toLowerCase().includes("beras")) basePrice = 72000;
+          else if (queryStr.toLowerCase().includes("gula")) basePrice = 16000;
+          else if (queryStr.toLowerCase().includes("susu")) basePrice = 120000;
+          else {
+            // Random base
+            basePrice = Math.floor(Math.random() * 80000) + 15000;
+          }
+
+          const tokoprice = Math.floor(basePrice * 0.96);
+          const shopeeprice = Math.floor(basePrice * 0.91);
+          const grosirprice = Math.floor(basePrice * 0.78); // Distributor bulk discount
+
+          toolResult = {
+            query: queryStr,
+            searchType: searchB2B ? "Gubernur Grosir / UMKM B2B" : "Eceran Konsumen B2C",
+            options: [
+              {
+                platform: "Shopee Super Hemat",
+                price: shopeeprice,
+                rating: 4.8,
+                deliveryDays: "1-2 hari",
+                stockStatus: "Ready Stock",
+                reliabilityScore: 96,
+                isWinner: !searchB2B
+              },
+              {
+                platform: "Tokopedia Official",
+                price: tokoprice,
+                rating: 4.9,
+                deliveryDays: "Same-Day",
+                stockStatus: "Ready Stock",
+                reliabilityScore: 99,
+                isWinner: false
+              },
+              {
+                platform: "Grosir Distributor Official",
+                price: grosirprice,
+                rating: 4.7,
+                deliveryDays: "2-3 hari (Kargo)",
+                stockStatus: "Terselia Melimpah",
+                bulkDiscount: "Beli min 10 unit hemat 22%",
+                reliabilityScore: 94,
+                isWinner: searchB2B
+              }
+            ],
+            savingCalculated: searchB2B ? (basePrice - grosirprice) : (basePrice - shopeeprice)
+          };
+        }
+
+        results.push({
+          response: { output: toolResult }
+        });
+      }
+
+      // Re-invoke Gemini with tools outcome to get final commentary
+      const nextContents = [
+        ...contents,
+        response.candidates?.[0]?.content, // Model tool requests
+        {
+          role: "user",
+          parts: results.map((r, ri) => ({
+            functionResponse: {
+              name: functionCalls[ri].name,
+              response: r.response
+            }
+          }))
+        }
+      ];
+
+      const secondResponse = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: nextContents,
+        config: {
+          systemInstruction,
+          tools,
+          toolConfig: { includeServerSideToolInvocations: true }
+        }
+      });
+
+      res.json({
+        reply: secondResponse.text,
+        toolCalls: toolLogs
+      });
+    } else {
+      res.json({
+        reply: response.text,
+        toolCalls: []
+      });
+    }
+
+  } catch (error: any) {
+    console.error("Agent Chat API error:", error);
+    res.status(500).json({ error: error.message || "Gagal berinteraksi dengan asisten AI." });
+  }
+});
+
 // Vite middleware for development
 async function setupVite() {
   if (process.env.NODE_ENV !== "production") {

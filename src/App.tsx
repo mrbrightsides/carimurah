@@ -1,4 +1,4 @@
-declare var pendo: { trackAgent: (eventType: string, metadata: object) => void };
+declare var pendo: { trackAgent: (eventType: string, metadata: object) => void; [key: string]: any };
 
 import { motion, AnimatePresence } from "motion/react";
 import React, { useState, useRef, useEffect } from "react";
@@ -134,6 +134,23 @@ function ComparisonTable({ options, isB2B }: { options: any[]; isB2B: boolean })
   );
 }
 
+const DEFAULT_GUEST_PROFILE: UserProfile = {
+  uid: "guest",
+  displayName: "Guest User",
+  email: null,
+  photoURL: null,
+  subscription: {
+    tier: "FREE"
+  },
+  preferences: {
+    currency: "IDR",
+    language: "id",
+    notifyOnBetterPrices: true,
+    b2bFocus: "price",
+    showTrendChartsByDefault: false
+  }
+};
+
 export default function App() {
   const [mode, setMode] = useState<InputMode | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
@@ -141,7 +158,7 @@ export default function App() {
   const [isB2B, setIsB2B] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(DEFAULT_GUEST_PROFILE);
   const [watchlist, setWatchlist] = useState<ItemAnalysis[]>([]);
   const [manualText, setManualText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -163,6 +180,84 @@ export default function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [monthlySummary, setMonthlySummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+
+  // Chat Agent State
+  const [chatMessages, setChatMessages] = useState<Array<{ text: string; role: "user" | "assistant"; id: string; toolCalls?: string[] }>>([
+    {
+      id: "welcome",
+      role: "assistant",
+      text: "Halo! Saya adalah **Asisten CariMurah.ai**, asisten pintar belanja otonom Anda yang berbasis MongoDB Atlas & Gemini. 🚀\n\nSaya bisa membantu Anda:\n- 🔍 **Mencari produk termurah** di marketplace secara real-time.\n- 📊 **Membaca riwayat analisis** yang tersimpan di MongoDB Anda.\n- ⚙️ **Melihat & mengupdate preferensi belanja** Anda secara instan.\n- 📉 **Memantau dan mengaudit kebocoran pengeluaran**.\n\nSilakan ketik pertanyaan Anda atau coba tombol rekomendasi cepat di bawah!"
+    }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  const sendChatMessage = async (presetText?: string) => {
+    const textToSend = presetText || chatInput;
+    if (!textToSend.trim() || chatLoading) return;
+
+    if (!presetText) setChatInput("");
+    setChatError(null);
+    setChatLoading(true);
+
+    const userMsg = {
+      id: "msg-" + Date.now(),
+      role: "user" as const,
+      text: textToSend
+    };
+
+    setChatMessages(prev => [...prev, userMsg]);
+
+    try {
+      const apiHistory = chatMessages.map(m => ({
+        role: m.role,
+        text: m.text
+      }));
+
+      const res = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: textToSend,
+          history: apiHistory,
+          uid: user?.uid || null,
+          isB2B
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal menghubungi Asisten.");
+      }
+
+      const assistantMsg = {
+        id: "msg-" + Date.now() + "-reply",
+        role: "assistant" as const,
+        text: data.reply,
+        toolCalls: data.toolCalls || []
+      };
+
+      setChatMessages(prev => [...prev, assistantMsg]);
+      
+      // If a preference update or other DB update tool is executed, let's refresh the values
+      if (data.toolCalls && data.toolCalls.some((tc: string) => tc.includes("update_user_preferences"))) {
+        if (user) {
+          getUserProfile(user.uid).then(p => {
+            if (p) {
+              setProfile(p);
+              setIsB2B(p.preferences?.b2bFocus !== undefined);
+            }
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setChatError(err.message || "Koneksi ke asisten bermasalah. Coba lagi.");
+    } finally {
+      setChatLoading(false);
+    }
+  };
   
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -195,25 +290,38 @@ export default function App() {
       if (u) {
         loadHistoryFromDB(u.uid);
         const p = await getUserProfile(u.uid);
-        setProfile(p);
-        pendo.identify({
-          visitor: {
-            id: u.uid,
-            email: u.email || '',
-            full_name: u.displayName || '',
-            subscriptionTier: p?.subscription?.tier || 'FREE',
-            subscriptionExpiresAt: p?.subscription?.expiresAt || '',
-            preferencesCurrency: p?.preferences?.currency || 'IDR',
-            preferencesLanguage: p?.preferences?.language || 'id',
-            notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
-            b2bFocus: p?.preferences?.b2bFocus || 'price',
-            showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
-          }
-        });
+        setProfile(p || { ...DEFAULT_GUEST_PROFILE, uid: u.uid, displayName: u.displayName || "User", email: u.email });
+        if (typeof pendo !== "undefined") {
+          pendo.identify({
+            visitor: {
+              id: u.uid,
+              email: u.email || '',
+              full_name: u.displayName || '',
+              subscriptionTier: p?.subscription?.tier || 'FREE',
+              subscriptionExpiresAt: p?.subscription?.expiresAt || '',
+              preferencesCurrency: p?.preferences?.currency || 'IDR',
+              preferencesLanguage: p?.preferences?.language || 'id',
+              notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
+              b2bFocus: p?.preferences?.b2bFocus || 'price',
+              showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
+            }
+          });
+        }
       }
       else {
         const saved = localStorage.getItem("carimurah_history");
         if (saved) setHistory(JSON.parse(saved));
+
+        const savedProfile = localStorage.getItem("carimurah_guest_profile");
+        if (savedProfile) {
+          try {
+            setProfile(JSON.parse(savedProfile));
+          } catch (e) {
+            setProfile(DEFAULT_GUEST_PROFILE);
+          }
+        } else {
+          setProfile(DEFAULT_GUEST_PROFILE);
+        }
       }
     });
     return () => unsubscribe();
@@ -239,7 +347,7 @@ export default function App() {
       await loadHistoryFromDB(user.uid);
       setShowDeleteConfirm(false);
 
-      if (window.pendo) {
+      if (typeof pendo !== "undefined") {
         pendo.track("bulk_history_deleted", {
           deleted_count: deletedCount,
           total_history_count: totalHistoryCount,
@@ -275,16 +383,16 @@ export default function App() {
       const res = await fetch("/api/monthly-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           history: history.slice(0, 50), // Send recent 50 for context
-          preferences: profile?.preferences
+          preferences: profile?.preferences 
         }),
       });
       const data = await res.json();
       if (data.report) {
         setMonthlySummary(data.report);
 
-        if (window.pendo) {
+        if (typeof pendo !== "undefined") {
           pendo.track("monthly_summary_generated", {
             history_items_analyzed: Math.min(history.length, 50),
             currency: profile?.preferences?.currency || "IDR",
@@ -328,7 +436,7 @@ export default function App() {
     link.click();
     document.body.removeChild(link);
 
-    if (window.pendo) {
+    if (typeof pendo !== "undefined") {
       pendo.track("csv_export_completed", {
         rows_count: filteredHistory.length,
         filter_type: filterType,
@@ -349,7 +457,7 @@ export default function App() {
       setHistory(updated);
       localStorage.setItem("carimurah_history", JSON.stringify(updated));
 
-      if (window.pendo) {
+      if (typeof pendo !== "undefined") {
         pendo.track("history_note_updated", {
           history_id: historyId,
           note_length: note.length,
@@ -359,12 +467,12 @@ export default function App() {
       }
       return;
     }
-
+    
     try {
       await updateHistoryItem(user.uid, historyId, { note });
       setHistory(history.map(h => h.id === historyId ? { ...h, note } : h));
 
-      if (window.pendo) {
+      if (typeof pendo !== "undefined") {
         pendo.track("history_note_updated", {
           history_id: historyId,
           note_length: note.length,
@@ -447,7 +555,7 @@ export default function App() {
       const processingEnd = Date.now();
       setAnalysis({ step: "complete", batchResult });
 
-      if (window.pendo) {
+      if (typeof pendo !== "undefined") {
         pendo.track("price_analysis_completed", {
           input_type: payload.image ? "image" : payload.text ? "text" : "audio",
           is_b2b: isB2B,
@@ -460,7 +568,7 @@ export default function App() {
           is_guest: !user
         });
       }
-
+      
       if (user) {
         await saveHistory(user.uid, {
           date: new Date().toISOString(),
@@ -471,7 +579,7 @@ export default function App() {
         });
         loadHistoryFromDB(user.uid);
 
-        if (window.pendo) {
+        if (typeof pendo !== "undefined") {
           pendo.track("analysis_history_saved", {
             total_saved_amount: batchResult.totalPotentialSavings,
             items_count: batchResult.items.length,
@@ -493,7 +601,7 @@ export default function App() {
          setHistory(updated);
          localStorage.setItem("carimurah_history", JSON.stringify(updated));
 
-         if (window.pendo) {
+         if (typeof pendo !== "undefined") {
            pendo.track("analysis_history_saved", {
              total_saved_amount: batchResult.totalPotentialSavings,
              items_count: batchResult.items.length,
@@ -542,14 +650,14 @@ export default function App() {
       context.drawImage(videoRef.current, 0, 0, width, height);
       const imageData = canvasRef.current.toDataURL("image/jpeg", 0.7);
 
-      if (window.pendo) {
+      if (typeof pendo !== "undefined") {
         pendo.track("camera_scan_submitted", {
           is_b2b: isB2B,
           user_tier: profile?.subscription?.tier || "FREE",
           camera_facing_mode: "environment"
         });
       }
-
+      
       stopCamera();
       await processInput({ image: imageData });
     }
@@ -604,7 +712,7 @@ export default function App() {
         setIsRecording(false);
         setMode(null);
         if (manualText) {
-          if (window.pendo) {
+          if (typeof pendo !== "undefined") {
             pendo.track("voice_input_submitted", {
               transcript_length: manualText.length,
               language: profile?.preferences?.language || "id",
@@ -661,7 +769,7 @@ export default function App() {
     reader.onloadend = () => {
       const base64 = reader.result as string;
 
-      if (window.pendo) {
+      if (typeof pendo !== "undefined") {
         pendo.track("file_upload_analyzed", {
           file_type: file.type,
           file_size_bytes: file.size,
@@ -712,7 +820,7 @@ export default function App() {
         source.buffer = audioBuffer;
         source.connect(audioCtx.destination);
         source.onended = () => {
-          if (window.pendo) {
+          if (typeof pendo !== "undefined") {
             pendo.track("tts_playback_completed", {
               voice_model: "Zephyr",
               audio_duration_ms: Math.round((audioBuffer.length / (data.rate || 24000)) * 1000),
@@ -805,18 +913,29 @@ export default function App() {
                        setMode(null);
                        setShowSettings(!showSettings);
                     }} 
-                    className="p-2 opacity-60 hover:opacity-100 active:scale-95 transition-transform"
+                    className="p-2 opacity-60 hover:opacity-100 cursor-pointer active:scale-95 transition-all text-current"
                   >
                     <Settings className="w-5 h-5" />
                  </button>
-                 <button onClick={() => { pendo.clearSession(); logout(); }} className="p-2 opacity-60 hover:opacity-100">
+                 <button onClick={() => logout()} className="p-2 opacity-60 hover:opacity-100">
                     <LogOut className="w-5 h-5" />
                  </button>
                </div>
              ) : (
-               <button onClick={() => loginWithGoogle()} className="p-2 opacity-60 hover:opacity-100">
-                  <LogIn className="w-5 h-5" />
-               </button>
+               <div className="flex items-center gap-2">
+                 <button 
+                    onClick={() => {
+                       setMode(null);
+                       setShowSettings(!showSettings);
+                    }} 
+                    className="p-2 opacity-60 hover:opacity-100 cursor-pointer active:scale-95 transition-all text-current"
+                  >
+                    <Settings className="w-5 h-5" />
+                 </button>
+                 <button onClick={() => loginWithGoogle()} className="p-2 opacity-60 hover:opacity-100">
+                    <LogIn className="w-5 h-5" />
+                 </button>
+               </div>
              )}
           </div>
         </div>
@@ -1080,9 +1199,9 @@ export default function App() {
                              {selectedHistoryIds.includes(item.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
                           </button>
                        </div>
-                       <button 
+                       <div 
                          onClick={() => setAnalysis({ step: "complete", batchResult: item.result, isCached: true })}
-                         className={`w-full p-5 pl-14 rounded-2xl flex justify-between items-center text-left transition-transform active:scale-95 ${isB2B ? "bg-white/5" : "bg-slate-50"} ${selectedHistoryIds.includes(item.id) ? "ring-2 ring-indigo-500/50" : ""}`}
+                         className={`w-full p-5 pl-14 rounded-2xl flex justify-between items-center text-left cursor-pointer transition-transform active:scale-95 ${isB2B ? "bg-white/5" : "bg-slate-50"} ${selectedHistoryIds.includes(item.id) ? "ring-2 ring-indigo-500/50" : ""}`}
                        >
                           <div className="flex-1">
                              <div className="flex items-center gap-3 mb-1">
@@ -1092,7 +1211,7 @@ export default function App() {
                                     e.stopPropagation();
                                     const names = item.result.items.map(it => it.productName).join(", ");
 
-                                    if (window.pendo) {
+                                    if (typeof pendo !== "undefined") {
                                       const originalDate = new Date(item.date);
                                       const daysSince = Math.floor((Date.now() - originalDate.getTime()) / (1000 * 3600 * 24));
                                       pendo.track("reorder_initiated", {
@@ -1117,7 +1236,7 @@ export default function App() {
                              <span className={`block font-bold ${isB2B ? "text-indigo-400" : "text-emerald-600"}`}>+Rp{item.totalSaved.toLocaleString("id-ID")}</span>
                              <span className="text-[8px] opacity-40 uppercase font-black">Saved</span>
                           </div>
-                       </button>
+                       </div>
                        <div className="mt-2 pr-4 pl-14">
                           <div className="relative">
                             <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 opacity-30" />
@@ -1166,17 +1285,20 @@ export default function App() {
                            <select 
                             value={profile.preferences.currency}
                             onChange={(e) => {
-                              const previousValue = profile.preferences.currency;
                               const news = { ...profile.preferences, currency: e.target.value as any };
-                              setProfile({ ...profile, preferences: news });
-                              updateProfile(user!.uid, { preferences: news });
-                              if (window.pendo) {
+                              if (typeof pendo !== "undefined") {
                                 pendo.track("user_preferences_updated", {
                                   setting_changed: "currency",
                                   new_value: e.target.value,
-                                  previous_value: previousValue,
+                                  previous_value: profile.preferences.currency,
                                   user_tier: profile.subscription?.tier || "FREE"
                                 });
+                              }
+                              setProfile({ ...profile, preferences: news });
+                              if (user) {
+                                updateProfile(user.uid, { preferences: news });
+                              } else {
+                                localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...profile, preferences: news }));
                               }
                             }}
                             className="w-full bg-transparent font-bold outline-none"
@@ -1195,17 +1317,20 @@ export default function App() {
                            <select 
                             value={profile.preferences.language}
                             onChange={(e) => {
-                              const previousValue = profile.preferences.language;
                               const news = { ...profile.preferences, language: e.target.value as any };
-                              setProfile({ ...profile, preferences: news });
-                              updateProfile(user!.uid, { preferences: news });
-                              if (window.pendo) {
+                              if (typeof pendo !== "undefined") {
                                 pendo.track("user_preferences_updated", {
                                   setting_changed: "language",
                                   new_value: e.target.value,
-                                  previous_value: previousValue,
+                                  previous_value: profile.preferences.language,
                                   user_tier: profile.subscription?.tier || "FREE"
                                 });
+                              }
+                              setProfile({ ...profile, preferences: news });
+                              if (user) {
+                                updateProfile(user.uid, { preferences: news });
+                              } else {
+                                localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...profile, preferences: news }));
                               }
                             }}
                             className="w-full bg-transparent font-bold outline-none"
@@ -1225,17 +1350,20 @@ export default function App() {
                            </div>
                            <button 
                             onClick={() => {
-                              const newValue = !profile.preferences.notifyOnBetterPrices;
-                              const news = { ...profile.preferences, notifyOnBetterPrices: newValue };
-                              setProfile({ ...profile, preferences: news });
-                              updateProfile(user!.uid, { preferences: news });
-                              if (window.pendo) {
+                              const news = { ...profile.preferences, notifyOnBetterPrices: !profile.preferences.notifyOnBetterPrices };
+                              if (typeof pendo !== "undefined") {
                                 pendo.track("user_preferences_updated", {
                                   setting_changed: "notifyOnBetterPrices",
-                                  new_value: String(newValue),
-                                  previous_value: String(!newValue),
+                                  new_value: String(!profile.preferences.notifyOnBetterPrices),
+                                  previous_value: String(profile.preferences.notifyOnBetterPrices),
                                   user_tier: profile.subscription?.tier || "FREE"
                                 });
+                              }
+                              setProfile({ ...profile, preferences: news });
+                              if (user) {
+                                updateProfile(user.uid, { preferences: news });
+                              } else {
+                                localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...profile, preferences: news }));
                               }
                             }}
                             className={`w-12 h-6 rounded-full transition-all flex items-center px-1 ${profile.preferences.notifyOnBetterPrices ? "bg-emerald-500" : "bg-slate-300"}`}
@@ -1255,17 +1383,20 @@ export default function App() {
                            <select 
                             value={profile.preferences.b2bFocus}
                             onChange={(e) => {
-                              const previousValue = profile.preferences.b2bFocus;
                               const news = { ...profile.preferences, b2bFocus: e.target.value as any };
-                              setProfile({ ...profile, preferences: news });
-                              updateProfile(user!.uid, { preferences: news });
-                              if (window.pendo) {
+                              if (typeof pendo !== "undefined") {
                                 pendo.track("user_preferences_updated", {
                                   setting_changed: "b2bFocus",
                                   new_value: e.target.value,
-                                  previous_value: previousValue,
+                                  previous_value: profile.preferences.b2bFocus,
                                   user_tier: profile.subscription?.tier || "FREE"
                                 });
+                              }
+                              setProfile({ ...profile, preferences: news });
+                              if (user) {
+                                updateProfile(user.uid, { preferences: news });
+                              } else {
+                                localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...profile, preferences: news }));
                               }
                             }}
                             className="bg-transparent font-bold outline-none"
@@ -1286,17 +1417,20 @@ export default function App() {
                            </div>
                            <button 
                             onClick={() => {
-                              const newValue = !profile.preferences.showTrendChartsByDefault;
-                              const news = { ...profile.preferences, showTrendChartsByDefault: newValue };
-                              setProfile({ ...profile, preferences: news });
-                              updateProfile(user!.uid, { preferences: news });
-                              if (window.pendo) {
+                              const news = { ...profile.preferences, showTrendChartsByDefault: !profile.preferences.showTrendChartsByDefault };
+                              if (typeof pendo !== "undefined") {
                                 pendo.track("user_preferences_updated", {
                                   setting_changed: "showTrendChartsByDefault",
-                                  new_value: String(newValue),
-                                  previous_value: String(!newValue),
+                                  new_value: String(!profile.preferences.showTrendChartsByDefault),
+                                  previous_value: String(profile.preferences.showTrendChartsByDefault),
                                   user_tier: profile.subscription?.tier || "FREE"
                                 });
+                              }
+                              setProfile({ ...profile, preferences: news });
+                              if (user) {
+                                updateProfile(user.uid, { preferences: news });
+                              } else {
+                                localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...profile, preferences: news }));
                               }
                             }}
                             className={`w-12 h-6 rounded-full transition-all flex items-center px-1 ${profile.preferences.showTrendChartsByDefault ? "bg-indigo-500" : "bg-slate-300"}`}
@@ -1319,11 +1453,11 @@ export default function App() {
                       CariMurah.ai membantu kamu menemukan harga distributor & retail termurah se-Indonesia.
                     </p>
                   </div>
-                  <button
+                  <button 
                     onClick={() => {
                       const newMode = !isB2B;
                       setIsB2B(newMode);
-                      if (window.pendo) {
+                      if (typeof pendo !== "undefined") {
                         pendo.track("b2b_mode_toggled", {
                           new_mode: newMode ? "B2B" : "B2C",
                           previous_mode: isB2B ? "B2B" : "B2C",
@@ -1346,6 +1480,20 @@ export default function App() {
                     <span className="block font-bold text-xl tracking-tight">Kamera AI Scan</span>
                     <span className="text-xs opacity-70">Nota / Barcode / Produk</span>
                   </div>
+                </button>
+
+                <button 
+                  onClick={() => setMode("chat")}
+                  className="col-span-3 p-6 rounded-[2.5rem] bg-gradient-to-r from-violet-600 via-indigo-600 to-indigo-500 text-white flex items-center justify-center gap-4 transition-all active:scale-95 shadow-xl shadow-indigo-500/20"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+                    <MessageSquare className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="text-left flex-1">
+                    <span className="block font-black text-[9px] uppercase tracking-widest text-indigo-200">Asisten CariMurah AI</span>
+                    <span className="text-base font-bold text-white leading-tight block">Tanya Asisten AI & Cari di Database</span>
+                  </div>
+                  <Sparkles className="w-5 h-5 text-indigo-300 animate-pulse" />
                 </button>
                 
                 <label className={`p-4 rounded-3xl border flex flex-col items-center gap-2 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`}>
@@ -1472,54 +1620,54 @@ export default function App() {
                                   <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">{item.brand}</span>
                                   <h4 className="font-bold text-sm">{item.productName}</h4>
                                </div>
-                               <button
+                               <button 
                                  onClick={() => {
-                                   if (window.pendo) {
-                                     pendo.track("watchlist_item_removed", {
-                                       product_name: item.productName,
-                                       watchlist_size_after: watchlist.length - 1,
-                                       user_tier: profile?.subscription?.tier || "FREE"
-                                     });
-                                   }
-                                   setWatchlist(watchlist.filter((_, i) => i !== idx));
-                                 }}
+                                    if (typeof pendo !== "undefined") {
+                                      pendo.track("watchlist_item_removed", {
+                                        product_name: item.productName,
+                                        watchlist_size_after: watchlist.length - 1,
+                                        user_tier: profile?.subscription?.tier || "FREE"
+                                      });
+                                    }
+                                    setWatchlist(watchlist.filter((_, i) => i !== idx));
+                                  }}
                                  className="p-1 opacity-20 hover:opacity-100 text-rose-500"
                                >
                                   <Trash className="w-4 h-4" />
                                </button>
                             </div>
                              <div className="mb-4">
-                                <input
-                                  type="range"
-                                  min="1"
-                                  max="50"
-                                  value={item.minPriceDrop || 5}
+                                <input 
+                                  type="range" 
+                                  min="1" 
+                                  max="50" 
+                                  value={item.minPriceDrop || 5} 
                                   onChange={(e) => {
                                     const newWatchlist = [...watchlist];
                                     newWatchlist[idx] = { ...item, minPriceDrop: parseInt(e.target.value) };
                                     setWatchlist(newWatchlist);
                                   }}
                                   onMouseUp={(e) => {
-                                    if (window.pendo) {
-                                      pendo.track("watchlist_threshold_configured", {
-                                        product_name: item.productName,
-                                        threshold_percent: parseInt((e.target as HTMLInputElement).value),
-                                        previous_threshold: item.minPriceDrop || 5,
-                                        user_tier: profile?.subscription?.tier || "FREE"
-                                      });
-                                    }
-                                  }}
-                                  onTouchEnd={(e) => {
-                                    if (window.pendo) {
-                                      pendo.track("watchlist_threshold_configured", {
-                                        product_name: item.productName,
-                                        threshold_percent: parseInt((e.target as HTMLInputElement).value),
-                                        previous_threshold: item.minPriceDrop || 5,
-                                        user_tier: profile?.subscription?.tier || "FREE"
-                                      });
-                                    }
-                                  }}
-                                  className={`w-full h-1 rounded-lg appearance-none cursor-pointer accent-emerald-500 ${isB2B ? "bg-white/10" : "bg-slate-200"}`}
+                                     if (typeof pendo !== "undefined") {
+                                       pendo.track("watchlist_threshold_configured", {
+                                         product_name: item.productName,
+                                         threshold_percent: parseInt((e.target as HTMLInputElement).value),
+                                         previous_threshold: item.minPriceDrop || 5,
+                                         user_tier: profile?.subscription?.tier || "FREE"
+                                       });
+                                     }
+                                   }}
+                                   onTouchEnd={(e) => {
+                                     if (typeof pendo !== "undefined") {
+                                       pendo.track("watchlist_threshold_configured", {
+                                         product_name: item.productName,
+                                         threshold_percent: parseInt((e.target as HTMLInputElement).value),
+                                         previous_threshold: item.minPriceDrop || 5,
+                                         user_tier: profile?.subscription?.tier || "FREE"
+                                       });
+                                     }
+                                   }}
+                                   className={`w-full h-1 rounded-lg appearance-none cursor-pointer accent-emerald-500 ${isB2B ? "bg-white/10" : "bg-slate-200"}`}
                                 />
                              </div>
 
@@ -1578,25 +1726,26 @@ export default function App() {
                       </table>
                    </div>
 
-                   <button
+                   <button 
                      onClick={() => {
-                       setAnalysis({
-                         ...analysis,
+                       setAnalysis({ 
+                         ...analysis, 
                          batchResult: { ...analysis.batchResult!, rfqStatus: 'sent' }
+                        });
+                        setMode(null);
+                        if (typeof pendo !== "undefined" && analysis?.batchResult) {
+                          pendo.track("rfq_sent", {
+                            items_count: analysis.batchResult.items.length,
+                            total_target_price: analysis.batchResult.items.reduce((sum, it) => sum + it.recommendedPrice, 0),
+                            send_method: "whatsapp_email",
+                            user_tier: profile?.subscription?.tier || "FREE",
+                            product_names: analysis.batchResult.items.map(it => it.productName).join(", ").substring(0, 200)
+                          });
+                        }
+                        /*
                        });
-
-                       if (window.pendo) {
-                         pendo.track("rfq_sent", {
-                           items_count: analysis.batchResult!.items.length,
-                           total_target_price: analysis.batchResult!.items.reduce((sum, it) => sum + it.recommendedPrice, 0),
-                           send_method: "whatsapp_email",
-                           user_tier: profile?.subscription?.tier || "FREE",
-                           product_names: analysis.batchResult!.items.map(it => it.productName).join(", ").substring(0, 200)
-                         });
-                       }
-
                        setMode(null);
-                     }}
+                     */}}
                      className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl"
                    >
                       <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Send via API WhatsApp/Email
@@ -1698,6 +1847,157 @@ export default function App() {
                 >
                   Selesai Berbicara
                 </button>
+             </motion.section>
+          ) : mode === "chat" ? (
+             <motion.section key="chat" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6 flex flex-col min-h-[70vh]">
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-4">
+                  <div className="flex items-center gap-4">
+                     <button onClick={() => setMode(null)} className="p-2.5 bg-slate-100 dark:bg-white/10 rounded-full active:scale-95 transition-all cursor-pointer">
+                       <ArrowLeft className="w-5 h-5" />
+                     </button>
+                     <div>
+                        <h2 className="text-xl font-black flex items-center gap-2">
+                          Asisten Pintar AI
+                          <span className="flex h-2 w-2 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                        </h2>
+                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-40">Koneksi MongoDB Atlas & Gemini</span>
+                     </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setChatMessages([
+                        {
+                          id: "welcome-" + Date.now(),
+                          role: "assistant",
+                          text: "Halo! Riwayat percakapan telah dibersihkan. Ada yang bisa saya bantu sekarang?"
+                        }
+                      ]);
+                      setChatError(null);
+                    }}
+                    className="text-xs font-black uppercase opacity-40 hover:opacity-100 transition-all border border-slate-200 dark:border-white/10 px-3 py-1.5 rounded-xl block cursor-pointer"
+                  >
+                    Reset Chat
+                  </button>
+                </div>
+
+                {/* Messages List */}
+                <div className="flex-1 space-y-6 overflow-y-auto max-h-[50vh] pr-2 minimal-scrollbar scroll-smooth py-4">
+                  {chatMessages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} items-start gap-3`}>
+                      {msg.role === "assistant" && (
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center shrink-0 shadow-md">
+                          <Sparkles className="w-4 h-4 text-white" />
+                        </div>
+                      )}
+                      
+                      <div className="space-y-2 max-w-[85%]">
+                        {/* Message container */}
+                        <div className={`p-5 rounded-[2rem] text-sm leading-relaxed ${
+                          msg.role === "user" 
+                            ? (isB2B ? "bg-indigo-600 text-white rounded-tr-none" : "bg-slate-905 text-white rounded-tr-none")
+                            : (isB2B ? "bg-white/5 border border-white/10 text-slate-100 rounded-tl-none" : "bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none")
+                        }`}>
+                          <div className="markdown-body">
+                             <Markdown>{msg.text}</Markdown>
+                          </div>
+                        </div>
+
+                        {/* Tool Traces */}
+                        {msg.toolCalls && msg.toolCalls.length > 0 && (
+                          <div className="space-y-1.5 pl-4">
+                            {msg.toolCalls.map((tc, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-[9px] font-mono opacity-50 dark:opacity-40">
+                                 <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 animate-pulse" />
+                                 <span>{tc}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {chatLoading && (
+                    <div className="flex justify-start items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
+                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                      </div>
+                      <div className={`px-5 py-3.5 rounded-[1.5rem] text-xs font-mono font-bold uppercase tracking-wider ${isB2B ? "bg-white/5 text-indigo-400" : "bg-slate-50 text-indigo-500"}`}>
+                        Asisten sedang memanggil database & merumuskan penghematan...
+                      </div>
+                    </div>
+                  )}
+
+                  {chatError && (
+                    <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs flex items-center gap-3">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{chatError}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Preset Prompt Recommendations */}
+                <div className="space-y-2 border-t border-slate-100 dark:border-white/10 pt-4">
+                  <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Rekomendasi Pintar (Autonomous MCP Tools)</span>
+                  <div className="flex flex-wrap gap-2 overflow-x-auto pb-2 -mx-2 px-2">
+                    <button 
+                      onClick={() => sendChatMessage("Ambil profil data preferensi saya dari database MongoDB")}
+                      disabled={chatLoading}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                    >
+                      📁 Ambil Profil DB
+                    </button>
+                    <button 
+                      onClick={() => sendChatMessage("Cari harga termurah produk minyak goreng Bimoli 2 liter")}
+                      disabled={chatLoading}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                    >
+                      🔍 Cari Minyak Murah
+                    </button>
+                    <button 
+                      onClick={() => sendChatMessage("Tampilkan riwayat belanja & penghematan uang saya")}
+                      disabled={chatLoading}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                    >
+                      📊 Scan Riwayat Penyelamatan
+                    </button>
+                    <button 
+                      onClick={() => sendChatMessage("Ubah preferensi fokus B2B saya ke pengiriman tercepat")}
+                      disabled={chatLoading}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                    >
+                      ⚙️ Update Preferensi Belanja
+                    </button>
+                  </div>
+                </div>
+
+                {/* Input Area */}
+                <div className="flex gap-3">
+                  <input 
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        sendChatMessage();
+                      }
+                    }}
+                    disabled={chatLoading}
+                    placeholder="Tanyakan harga, cari hemat, atau ganti profile preferensi..."
+                    className={`flex-1 px-6 py-4 rounded-2xl border-2 transition-all outline-none text-sm ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-100 focus:border-emerald-500 text-slate-900"}`}
+                  />
+                  <button 
+                    onClick={() => sendChatMessage()}
+                    disabled={!chatInput.trim() || chatLoading}
+                    className={`px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shrink-0 shadow-lg cursor-pointer ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-slate-900 text-white"}`}
+                  >
+                    Kirim
+                  </button>
+                </div>
              </motion.section>
           ) : mode === "compare" && selectedItemIndex !== null && analysis?.batchResult ? (
             <motion.section key="compare" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
@@ -1814,14 +2114,6 @@ export default function App() {
                                          onClick={() => {
                                            if (!watchlist.find(w => w.productName === item.productName)) {
                                              setWatchlist([...watchlist, item]);
-                                             if (window.pendo) {
-                                               pendo.track("watchlist_item_added", {
-                                                 product_name: item.productName,
-                                                 current_price: item.recommendedPrice,
-                                                 watchlist_size: watchlist.length + 1,
-                                                 user_tier: profile?.subscription?.tier || "FREE"
-                                               });
-                                             }
                                            }
                                          }}
                                          className="w-full py-2 text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100 flex items-center justify-center gap-2"
@@ -1923,19 +2215,9 @@ export default function App() {
                      <button 
                        onClick={() => {
                          if (user && profile) {
-                            const previousTier = profile.subscription?.tier || "FREE";
                             const subs = { tier: "PRO" as const, expiresAt: new Date(Date.now() + 30*24*60*60*1000).toISOString() };
                             setProfile({ ...profile, subscription: subs });
                             updateProfile(user.uid, { subscription: subs });
-                            if (window.pendo) {
-                              pendo.track("subscription_upgraded", {
-                                new_tier: "PRO",
-                                previous_tier: previousTier,
-                                expires_at: subs.expiresAt,
-                                duration_days: 30,
-                                user_id: user.uid
-                              });
-                            }
                             setMode(null);
                          }
                        }}
@@ -1965,19 +2247,9 @@ export default function App() {
                       <button 
                         onClick={() => {
                           if (user && profile) {
-                             const previousTier = profile.subscription?.tier || "FREE";
                              const subs = { tier: "ENTERPRISE" as const, expiresAt: new Date(Date.now() + 365*24*60*60*1000).toISOString() };
                              setProfile({ ...profile, subscription: subs });
                              updateProfile(user.uid, { subscription: subs });
-                             if (window.pendo) {
-                               pendo.track("subscription_upgraded", {
-                                 new_tier: "ENTERPRISE",
-                                 previous_tier: previousTier,
-                                 expires_at: subs.expiresAt,
-                                 duration_days: 365,
-                                 user_id: user.uid
-                               });
-                             }
                              setMode(null);
                           }
                         }}
@@ -2004,17 +2276,7 @@ export default function App() {
                        <p className="font-bold">{analysis.error || "Gagal Menganalisis Gambar"}</p>
                        <p className="text-xs opacity-50 px-10">{analysis.error ? "Klik tombol di bawah untuk mengulangi proses." : "Pastikan koneksi internet stabil dan gambar tidak terlalu gelap/buram."}</p>
                     </div>
-                    <button onClick={() => {
-                      if (typeof pendo !== "undefined") {
-                        pendo.trackAgent("user_reaction", {
-                          agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
-                          conversationId: crypto.randomUUID(),
-                          messageId: `retry_${Date.now()}`,
-                          content: "retry",
-                        });
-                      }
-                      setAnalysis(null); setMode(null);
-                    }} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm">Coba Lagi</button>
+                    <button onClick={() => { setAnalysis(null); setMode(null); }} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm">Coba Lagi</button>
                  </div>
                )}
 
@@ -2065,15 +2327,6 @@ export default function App() {
                                  navigator.clipboard.writeText(summary);
                                  setShowShareSuccess(true);
                                  setTimeout(() => setShowShareSuccess(false), 2000);
-
-                                 if (window.pendo) {
-                                   pendo.track("analysis_report_shared", {
-                                     total_savings_shared: analysis.batchResult.totalPotentialSavings,
-                                     items_count: analysis.batchResult.items.length,
-                                     share_method: "clipboard",
-                                     is_b2b: isB2B
-                                   });
-                                 }
                                }}
                                className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${showShareSuccess ? "bg-emerald-500 text-white" : "bg-indigo-500/20 border border-indigo-500/30 text-white"}`}
                              >

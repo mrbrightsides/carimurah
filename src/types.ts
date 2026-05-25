@@ -1,4 +1,4 @@
-export type InputMode = "camera" | "upload" | "voice" | "manual" | "dashboard" | "compare" | "settings" | "pricing" | "rfq" | "watchlist";
+export type InputMode = "camera" | "upload" | "voice" | "manual" | "dashboard" | "compare" | "settings" | "pricing" | "rfq" | "watchlist" | "chat";
 
 export type SubscriptionTier = "FREE" | "PRO" | "ENTERPRISE";
 
