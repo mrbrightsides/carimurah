@@ -230,12 +230,22 @@ export default function App() {
 
   const handleBulkDelete = async () => {
     if (!user || selectedHistoryIds.length === 0) return;
+    const deletedCount = selectedHistoryIds.length;
+    const totalHistoryCount = history.length;
     try {
       setLoading(true);
       await deleteHistoryItems(user.uid, selectedHistoryIds);
       setSelectedHistoryIds([]);
       await loadHistoryFromDB(user.uid);
       setShowDeleteConfirm(false);
+
+      if (window.pendo) {
+        pendo.track("bulk_history_deleted", {
+          deleted_count: deletedCount,
+          total_history_count: totalHistoryCount,
+          user_id: user.uid
+        });
+      }
     } catch (e) {
       console.error("Failed to bulk delete", e);
     } finally {
@@ -274,13 +284,12 @@ export default function App() {
       if (data.report) {
         setMonthlySummary(data.report);
 
-        if (typeof pendo !== "undefined") {
-          pendo.trackAgent("agent_response", {
-            agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
-            conversationId,
-            messageId: crypto.randomUUID(),
-            content: data.report,
-            modelUsed: "gemini-3-flash",
+        if (window.pendo) {
+          pendo.track("monthly_summary_generated", {
+            history_items_analyzed: Math.min(history.length, 50),
+            currency: profile?.preferences?.currency || "IDR",
+            language: profile?.preferences?.language || "id",
+            user_tier: profile?.subscription?.tier || "FREE"
           });
         }
       }
@@ -318,20 +327,51 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+
+    if (window.pendo) {
+      pendo.track("csv_export_completed", {
+        rows_count: filteredHistory.length,
+        filter_type: filterType,
+        date_range: dateRange,
+        sort_by: sortBy,
+        file_name: `CariMurah_Savings_${new Date().toISOString().split('T')[0]}.csv`
+      });
+    }
   };
 
   const handleUpdateNote = async (historyId: string, note: string) => {
+    const existingItem = history.find(h => h.id === historyId);
+    const isNewNote = !existingItem?.note;
+
     if (!user) {
       // Local updates for guests
       const updated = history.map(h => h.id === historyId ? { ...h, note } : h);
       setHistory(updated);
       localStorage.setItem("carimurah_history", JSON.stringify(updated));
+
+      if (window.pendo) {
+        pendo.track("history_note_updated", {
+          history_id: historyId,
+          note_length: note.length,
+          is_new_note: isNewNote,
+          is_guest: true
+        });
+      }
       return;
     }
-    
+
     try {
       await updateHistoryItem(user.uid, historyId, { note });
       setHistory(history.map(h => h.id === historyId ? { ...h, note } : h));
+
+      if (window.pendo) {
+        pendo.track("history_note_updated", {
+          history_id: historyId,
+          note_length: note.length,
+          is_new_note: isNewNote,
+          is_guest: false
+        });
+      }
     } catch (e) {
       console.error("Failed to update note", e);
     }
@@ -358,6 +398,7 @@ export default function App() {
   })();
 
   const processInput = async (payload: { image?: string; text?: string; audio?: string }) => {
+    const processingStart = Date.now();
     setLoading(true);
     setAnalysis({ step: "parsing" });
 
@@ -403,18 +444,23 @@ export default function App() {
       if (!batchResult.items) {
          throw new Error("Agen tidak menemukan data barang.");
       }
+      const processingEnd = Date.now();
       setAnalysis({ step: "complete", batchResult });
 
-      if (typeof pendo !== "undefined") {
-        pendo.trackAgent("agent_response", {
-          agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
-          conversationId,
-          messageId: crypto.randomUUID(),
-          content: batchResult.summaryVoice || JSON.stringify(batchResult.items.map(i => i.productName)),
-          modelUsed: "gemini-3-flash",
+      if (window.pendo) {
+        pendo.track("price_analysis_completed", {
+          input_type: payload.image ? "image" : payload.text ? "text" : "audio",
+          is_b2b: isB2B,
+          items_count: batchResult.items.length,
+          total_potential_savings: batchResult.totalPotentialSavings,
+          currency: profile?.preferences?.currency || "IDR",
+          language: profile?.preferences?.language || "id",
+          processing_duration_ms: processingEnd - processingStart,
+          user_tier: profile?.subscription?.tier || "FREE",
+          is_guest: !user
         });
       }
-      
+
       if (user) {
         await saveHistory(user.uid, {
           date: new Date().toISOString(),
@@ -424,6 +470,16 @@ export default function App() {
           result: batchResult
         });
         loadHistoryFromDB(user.uid);
+
+        if (window.pendo) {
+          pendo.track("analysis_history_saved", {
+            total_saved_amount: batchResult.totalPotentialSavings,
+            items_count: batchResult.items.length,
+            type: isB2B ? "B2B" : "B2C",
+            storage_method: "cloud",
+            is_guest: false
+          });
+        }
       } else {
          const newItem: HistoryItem = {
            id: Math.random().toString(36).substr(2, 9),
@@ -436,6 +492,16 @@ export default function App() {
          const updated = [newItem, ...history].slice(0, 10);
          setHistory(updated);
          localStorage.setItem("carimurah_history", JSON.stringify(updated));
+
+         if (window.pendo) {
+           pendo.track("analysis_history_saved", {
+             total_saved_amount: batchResult.totalPotentialSavings,
+             items_count: batchResult.items.length,
+             type: isB2B ? "B2B" : "B2C",
+             storage_method: "localStorage",
+             is_guest: true
+           });
+         }
       }
       playVoice(batchResult.summaryVoice);
     } catch (error: any) {
@@ -475,7 +541,15 @@ export default function App() {
       canvasRef.current.height = height;
       context.drawImage(videoRef.current, 0, 0, width, height);
       const imageData = canvasRef.current.toDataURL("image/jpeg", 0.7);
-      
+
+      if (window.pendo) {
+        pendo.track("camera_scan_submitted", {
+          is_b2b: isB2B,
+          user_tier: profile?.subscription?.tier || "FREE",
+          camera_facing_mode: "environment"
+        });
+      }
+
       stopCamera();
       await processInput({ image: imageData });
     }
@@ -529,7 +603,18 @@ export default function App() {
       recognition.onend = () => {
         setIsRecording(false);
         setMode(null);
-        if (manualText) processInput({ text: manualText });
+        if (manualText) {
+          if (window.pendo) {
+            pendo.track("voice_input_submitted", {
+              transcript_length: manualText.length,
+              language: profile?.preferences?.language || "id",
+              is_b2b: isB2B,
+              user_tier: profile?.subscription?.tier || "FREE",
+              recognition_method: "SpeechRecognition"
+            });
+          }
+          processInput({ text: manualText });
+        }
       };
 
       recognition.start();
@@ -575,6 +660,16 @@ export default function App() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64 = reader.result as string;
+
+      if (window.pendo) {
+        pendo.track("file_upload_analyzed", {
+          file_type: file.type,
+          file_size_bytes: file.size,
+          is_b2b: isB2B,
+          user_tier: profile?.subscription?.tier || "FREE"
+        });
+      }
+
       processInput({ image: base64 });
     };
     reader.readAsDataURL(file);
@@ -616,6 +711,16 @@ export default function App() {
         const source = audioCtx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(audioCtx.destination);
+        source.onended = () => {
+          if (window.pendo) {
+            pendo.track("tts_playback_completed", {
+              voice_model: "Zephyr",
+              audio_duration_ms: Math.round((audioBuffer.length / (data.rate || 24000)) * 1000),
+              tts_source: "studio_ai",
+              language: profile?.preferences?.language || "id"
+            });
+          }
+        };
         source.start();
       } else {
         throw new Error("No audio returned from Studio AI");
@@ -986,6 +1091,19 @@ export default function App() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const names = item.result.items.map(it => it.productName).join(", ");
+
+                                    if (window.pendo) {
+                                      const originalDate = new Date(item.date);
+                                      const daysSince = Math.floor((Date.now() - originalDate.getTime()) / (1000 * 3600 * 24));
+                                      pendo.track("reorder_initiated", {
+                                        original_analysis_date: item.date,
+                                        original_savings: item.totalSaved,
+                                        items_count: item.itemsCount,
+                                        type: item.type,
+                                        days_since_original: daysSince
+                                      });
+                                    }
+
                                     processInput({ text: `Cari barang: ${names}` });
                                   }}
                                   className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all ${isB2B ? "bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white" : "bg-emerald-100 text-emerald-600 hover:bg-emerald-500 hover:text-white"}`}
@@ -1048,9 +1166,18 @@ export default function App() {
                            <select 
                             value={profile.preferences.currency}
                             onChange={(e) => {
+                              const previousValue = profile.preferences.currency;
                               const news = { ...profile.preferences, currency: e.target.value as any };
                               setProfile({ ...profile, preferences: news });
                               updateProfile(user!.uid, { preferences: news });
+                              if (window.pendo) {
+                                pendo.track("user_preferences_updated", {
+                                  setting_changed: "currency",
+                                  new_value: e.target.value,
+                                  previous_value: previousValue,
+                                  user_tier: profile.subscription?.tier || "FREE"
+                                });
+                              }
                             }}
                             className="w-full bg-transparent font-bold outline-none"
                            >
@@ -1068,9 +1195,18 @@ export default function App() {
                            <select 
                             value={profile.preferences.language}
                             onChange={(e) => {
+                              const previousValue = profile.preferences.language;
                               const news = { ...profile.preferences, language: e.target.value as any };
                               setProfile({ ...profile, preferences: news });
                               updateProfile(user!.uid, { preferences: news });
+                              if (window.pendo) {
+                                pendo.track("user_preferences_updated", {
+                                  setting_changed: "language",
+                                  new_value: e.target.value,
+                                  previous_value: previousValue,
+                                  user_tier: profile.subscription?.tier || "FREE"
+                                });
+                              }
                             }}
                             className="w-full bg-transparent font-bold outline-none"
                            >
@@ -1089,9 +1225,18 @@ export default function App() {
                            </div>
                            <button 
                             onClick={() => {
-                              const news = { ...profile.preferences, notifyOnBetterPrices: !profile.preferences.notifyOnBetterPrices };
+                              const newValue = !profile.preferences.notifyOnBetterPrices;
+                              const news = { ...profile.preferences, notifyOnBetterPrices: newValue };
                               setProfile({ ...profile, preferences: news });
                               updateProfile(user!.uid, { preferences: news });
+                              if (window.pendo) {
+                                pendo.track("user_preferences_updated", {
+                                  setting_changed: "notifyOnBetterPrices",
+                                  new_value: String(newValue),
+                                  previous_value: String(!newValue),
+                                  user_tier: profile.subscription?.tier || "FREE"
+                                });
+                              }
                             }}
                             className={`w-12 h-6 rounded-full transition-all flex items-center px-1 ${profile.preferences.notifyOnBetterPrices ? "bg-emerald-500" : "bg-slate-300"}`}
                            >
@@ -1110,9 +1255,18 @@ export default function App() {
                            <select 
                             value={profile.preferences.b2bFocus}
                             onChange={(e) => {
+                              const previousValue = profile.preferences.b2bFocus;
                               const news = { ...profile.preferences, b2bFocus: e.target.value as any };
                               setProfile({ ...profile, preferences: news });
                               updateProfile(user!.uid, { preferences: news });
+                              if (window.pendo) {
+                                pendo.track("user_preferences_updated", {
+                                  setting_changed: "b2bFocus",
+                                  new_value: e.target.value,
+                                  previous_value: previousValue,
+                                  user_tier: profile.subscription?.tier || "FREE"
+                                });
+                              }
                             }}
                             className="bg-transparent font-bold outline-none"
                            >
@@ -1132,9 +1286,18 @@ export default function App() {
                            </div>
                            <button 
                             onClick={() => {
-                              const news = { ...profile.preferences, showTrendChartsByDefault: !profile.preferences.showTrendChartsByDefault };
+                              const newValue = !profile.preferences.showTrendChartsByDefault;
+                              const news = { ...profile.preferences, showTrendChartsByDefault: newValue };
                               setProfile({ ...profile, preferences: news });
                               updateProfile(user!.uid, { preferences: news });
+                              if (window.pendo) {
+                                pendo.track("user_preferences_updated", {
+                                  setting_changed: "showTrendChartsByDefault",
+                                  new_value: String(newValue),
+                                  previous_value: String(!newValue),
+                                  user_tier: profile.subscription?.tier || "FREE"
+                                });
+                              }
                             }}
                             className={`w-12 h-6 rounded-full transition-all flex items-center px-1 ${profile.preferences.showTrendChartsByDefault ? "bg-indigo-500" : "bg-slate-300"}`}
                            >
@@ -1156,8 +1319,18 @@ export default function App() {
                       CariMurah.ai membantu kamu menemukan harga distributor & retail termurah se-Indonesia.
                     </p>
                   </div>
-                  <button 
-                    onClick={() => setIsB2B(!isB2B)}
+                  <button
+                    onClick={() => {
+                      const newMode = !isB2B;
+                      setIsB2B(newMode);
+                      if (window.pendo) {
+                        pendo.track("b2b_mode_toggled", {
+                          new_mode: newMode ? "B2B" : "B2C",
+                          previous_mode: isB2B ? "B2B" : "B2C",
+                          user_tier: profile?.subscription?.tier || "FREE"
+                        });
+                      }
+                    }}
                     className={`p-1 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${isB2B ? "border-indigo-500 bg-indigo-500/10" : "border-slate-100 bg-slate-50"}`}
                   >
                     <div className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest ${isB2B ? "bg-indigo-500 text-white" : "bg-white text-slate-400"}`}>
@@ -1299,23 +1472,52 @@ export default function App() {
                                   <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">{item.brand}</span>
                                   <h4 className="font-bold text-sm">{item.productName}</h4>
                                </div>
-                               <button 
-                                 onClick={() => setWatchlist(watchlist.filter((_, i) => i !== idx))}
+                               <button
+                                 onClick={() => {
+                                   if (window.pendo) {
+                                     pendo.track("watchlist_item_removed", {
+                                       product_name: item.productName,
+                                       watchlist_size_after: watchlist.length - 1,
+                                       user_tier: profile?.subscription?.tier || "FREE"
+                                     });
+                                   }
+                                   setWatchlist(watchlist.filter((_, i) => i !== idx));
+                                 }}
                                  className="p-1 opacity-20 hover:opacity-100 text-rose-500"
                                >
                                   <Trash className="w-4 h-4" />
                                </button>
                             </div>
                              <div className="mb-4">
-                                <input 
-                                  type="range" 
-                                  min="1" 
-                                  max="50" 
-                                  value={item.minPriceDrop || 5} 
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="50"
+                                  value={item.minPriceDrop || 5}
                                   onChange={(e) => {
                                     const newWatchlist = [...watchlist];
                                     newWatchlist[idx] = { ...item, minPriceDrop: parseInt(e.target.value) };
                                     setWatchlist(newWatchlist);
+                                  }}
+                                  onMouseUp={(e) => {
+                                    if (window.pendo) {
+                                      pendo.track("watchlist_threshold_configured", {
+                                        product_name: item.productName,
+                                        threshold_percent: parseInt((e.target as HTMLInputElement).value),
+                                        previous_threshold: item.minPriceDrop || 5,
+                                        user_tier: profile?.subscription?.tier || "FREE"
+                                      });
+                                    }
+                                  }}
+                                  onTouchEnd={(e) => {
+                                    if (window.pendo) {
+                                      pendo.track("watchlist_threshold_configured", {
+                                        product_name: item.productName,
+                                        threshold_percent: parseInt((e.target as HTMLInputElement).value),
+                                        previous_threshold: item.minPriceDrop || 5,
+                                        user_tier: profile?.subscription?.tier || "FREE"
+                                      });
+                                    }
                                   }}
                                   className={`w-full h-1 rounded-lg appearance-none cursor-pointer accent-emerald-500 ${isB2B ? "bg-white/10" : "bg-slate-200"}`}
                                 />
@@ -1376,12 +1578,23 @@ export default function App() {
                       </table>
                    </div>
 
-                   <button 
+                   <button
                      onClick={() => {
-                       setAnalysis({ 
-                         ...analysis, 
-                         batchResult: { ...analysis.batchResult!, rfqStatus: 'sent' } 
+                       setAnalysis({
+                         ...analysis,
+                         batchResult: { ...analysis.batchResult!, rfqStatus: 'sent' }
                        });
+
+                       if (window.pendo) {
+                         pendo.track("rfq_sent", {
+                           items_count: analysis.batchResult!.items.length,
+                           total_target_price: analysis.batchResult!.items.reduce((sum, it) => sum + it.recommendedPrice, 0),
+                           send_method: "whatsapp_email",
+                           user_tier: profile?.subscription?.tier || "FREE",
+                           product_names: analysis.batchResult!.items.map(it => it.productName).join(", ").substring(0, 200)
+                         });
+                       }
+
                        setMode(null);
                      }}
                      className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl"
@@ -1601,6 +1814,14 @@ export default function App() {
                                          onClick={() => {
                                            if (!watchlist.find(w => w.productName === item.productName)) {
                                              setWatchlist([...watchlist, item]);
+                                             if (window.pendo) {
+                                               pendo.track("watchlist_item_added", {
+                                                 product_name: item.productName,
+                                                 current_price: item.recommendedPrice,
+                                                 watchlist_size: watchlist.length + 1,
+                                                 user_tier: profile?.subscription?.tier || "FREE"
+                                               });
+                                             }
                                            }
                                          }}
                                          className="w-full py-2 text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100 flex items-center justify-center gap-2"
@@ -1702,9 +1923,19 @@ export default function App() {
                      <button 
                        onClick={() => {
                          if (user && profile) {
+                            const previousTier = profile.subscription?.tier || "FREE";
                             const subs = { tier: "PRO" as const, expiresAt: new Date(Date.now() + 30*24*60*60*1000).toISOString() };
                             setProfile({ ...profile, subscription: subs });
                             updateProfile(user.uid, { subscription: subs });
+                            if (window.pendo) {
+                              pendo.track("subscription_upgraded", {
+                                new_tier: "PRO",
+                                previous_tier: previousTier,
+                                expires_at: subs.expiresAt,
+                                duration_days: 30,
+                                user_id: user.uid
+                              });
+                            }
                             setMode(null);
                          }
                        }}
@@ -1734,9 +1965,19 @@ export default function App() {
                       <button 
                         onClick={() => {
                           if (user && profile) {
+                             const previousTier = profile.subscription?.tier || "FREE";
                              const subs = { tier: "ENTERPRISE" as const, expiresAt: new Date(Date.now() + 365*24*60*60*1000).toISOString() };
                              setProfile({ ...profile, subscription: subs });
                              updateProfile(user.uid, { subscription: subs });
+                             if (window.pendo) {
+                               pendo.track("subscription_upgraded", {
+                                 new_tier: "ENTERPRISE",
+                                 previous_tier: previousTier,
+                                 expires_at: subs.expiresAt,
+                                 duration_days: 365,
+                                 user_id: user.uid
+                               });
+                             }
                              setMode(null);
                           }
                         }}
@@ -1824,6 +2065,15 @@ export default function App() {
                                  navigator.clipboard.writeText(summary);
                                  setShowShareSuccess(true);
                                  setTimeout(() => setShowShareSuccess(false), 2000);
+
+                                 if (window.pendo) {
+                                   pendo.track("analysis_report_shared", {
+                                     total_savings_shared: analysis.batchResult.totalPotentialSavings,
+                                     items_count: analysis.batchResult.items.length,
+                                     share_method: "clipboard",
+                                     is_b2b: isB2B
+                                   });
+                                 }
                                }}
                                className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${showShareSuccess ? "bg-emerald-500 text-white" : "bg-indigo-500/20 border border-indigo-500/30 text-white"}`}
                              >
