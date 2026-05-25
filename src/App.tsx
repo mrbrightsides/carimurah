@@ -1,3 +1,5 @@
+declare var pendo: { trackAgent: (eventType: string, metadata: object) => void };
+
 import { motion, AnimatePresence } from "motion/react";
 import React, { useState, useRef, useEffect } from "react";
 import { 
@@ -194,6 +196,20 @@ export default function App() {
         loadHistoryFromDB(u.uid);
         const p = await getUserProfile(u.uid);
         setProfile(p);
+        pendo.identify({
+          visitor: {
+            id: u.uid,
+            email: u.email || '',
+            full_name: u.displayName || '',
+            subscriptionTier: p?.subscription?.tier || 'FREE',
+            subscriptionExpiresAt: p?.subscription?.expiresAt || '',
+            preferencesCurrency: p?.preferences?.currency || 'IDR',
+            preferencesLanguage: p?.preferences?.language || 'id',
+            notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
+            b2bFocus: p?.preferences?.b2bFocus || 'price',
+            showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
+          }
+        });
       }
       else {
         const saved = localStorage.getItem("carimurah_history");
@@ -241,13 +257,27 @@ export default function App() {
     if (history.length === 0) return;
     setIsGeneratingSummary(true);
     setMonthlySummary(null);
+
+    const conversationId = crypto.randomUUID();
+    const promptMessageId = crypto.randomUUID();
+
+    if (typeof pendo !== "undefined") {
+      pendo.trackAgent("prompt", {
+        agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+        conversationId,
+        messageId: promptMessageId,
+        content: "Generate monthly savings summary",
+        suggestedPrompt: true,
+      });
+    }
+
     try {
       const res = await fetch("/api/monthly-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           history: history.slice(0, 50), // Send recent 50 for context
-          preferences: profile?.preferences 
+          preferences: profile?.preferences
         }),
       });
       const data = await res.json();
@@ -371,6 +401,20 @@ export default function App() {
     const processingStart = Date.now();
     setLoading(true);
     setAnalysis({ step: "parsing" });
+
+    const conversationId = crypto.randomUUID();
+    const promptMessageId = crypto.randomUUID();
+
+    if (typeof pendo !== "undefined") {
+      pendo.trackAgent("prompt", {
+        agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+        conversationId,
+        messageId: promptMessageId,
+        content: payload.text || (payload.image ? "[image uploaded]" : "[audio uploaded]"),
+        suggestedPrompt: false,
+        fileUploaded: !!(payload.image || payload.audio),
+      });
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -765,7 +809,7 @@ export default function App() {
                   >
                     <Settings className="w-5 h-5" />
                  </button>
-                 <button onClick={() => logout()} className="p-2 opacity-60 hover:opacity-100">
+                 <button onClick={() => { pendo.clearSession(); logout(); }} className="p-2 opacity-60 hover:opacity-100">
                     <LogOut className="w-5 h-5" />
                  </button>
                </div>
@@ -1960,7 +2004,17 @@ export default function App() {
                        <p className="font-bold">{analysis.error || "Gagal Menganalisis Gambar"}</p>
                        <p className="text-xs opacity-50 px-10">{analysis.error ? "Klik tombol di bawah untuk mengulangi proses." : "Pastikan koneksi internet stabil dan gambar tidak terlalu gelap/buram."}</p>
                     </div>
-                    <button onClick={() => { setAnalysis(null); setMode(null); }} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm">Coba Lagi</button>
+                    <button onClick={() => {
+                      if (typeof pendo !== "undefined") {
+                        pendo.trackAgent("user_reaction", {
+                          agentId: "zalXvF7bvqBY1qCtMTglr-WZuHA",
+                          conversationId: crypto.randomUUID(),
+                          messageId: `retry_${Date.now()}`,
+                          content: "retry",
+                        });
+                      }
+                      setAnalysis(null); setMode(null);
+                    }} className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm">Coba Lagi</button>
                  </div>
                )}
 
