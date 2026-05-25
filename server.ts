@@ -209,7 +209,13 @@ app.get("/toolspec.json", (req, res) => {
           type: "object",
           properties: {
             uid: { type: "string" },
-            product_data: { type: "object", properties: { product_name: { type: Type.STRING }, recommended_price: { type: Type.NUMBER } } }
+            product_data: { 
+              type: "object", 
+              properties: { 
+                product_name: { type: "string" }, 
+                recommended_price: { type: "number" } 
+              } 
+            }
           },
           required: ["uid", "product_data"]
         }
