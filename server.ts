@@ -37,9 +37,9 @@ app.get("/mcp/info", (req, res) => {
     status: "active",
     protocol: "SSE",
     endpoints: {
-      sse: `${baseUrl}/sse`,
-      message: `${baseUrl}/message`,
-      toolspec: `${baseUrl}/toolspec.json`,
+      sse: `${baseUrl}/mcp/sse`,
+      message: `${baseUrl}/mcp/message`,
+      toolspec: `${baseUrl}/mcp/toolspec.json`,
       openapi: `${baseUrl}/openapi.json`,
       health: `${baseUrl}/api/health`
     },
@@ -49,7 +49,7 @@ app.get("/mcp/info", (req, res) => {
 });
 
 app.get("/.well-known/mcp", (req, res) => {
-  res.redirect("/sse");
+  res.redirect("/mcp/sse");
 });
 
 app.get("/mcp", (req, res) => {
@@ -59,7 +59,7 @@ app.get("/mcp", (req, res) => {
 // --- MCP SSE Protocol Implementation ---
 const mcpSessions = new Map<string, express.Response>();
 
-app.post("/message", async (req, res) => {
+app.post("/mcp/message", async (req, res) => {
   const sessionId = req.query.sessionId as string;
   const message = req.body;
   if (!sessionId || !mcpSessions.has(sessionId)) return res.status(404).json({ error: "Session not found" });
@@ -231,7 +231,7 @@ app.post("/message", async (req, res) => {
   }
 });
 
-app.get("/sse", (req, res) => {
+app.get("/mcp/sse", (req, res) => {
   const sessionId = uuidv4();
   
   // Set headers for SSE with explicit CORS and no-cache
@@ -255,7 +255,7 @@ app.get("/sse", (req, res) => {
   const host = req.headers.host || "localhost:3000";
   const protocol = host.includes("localhost") ? "http" : "https";
   const baseUrl = `${protocol}://${host}`;
-  const endpointUrl = `${baseUrl}/message?sessionId=${sessionId}`;
+  const endpointUrl = `${baseUrl}/mcp/message?sessionId=${sessionId}`;
   
   // Initial endpoint event - MUST be exactly this format for discovery
   res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
@@ -271,7 +271,7 @@ app.get("/sse", (req, res) => {
 });
 
 // Helper for toolspec.json to paste in GCP
-app.get("/toolspec.json", (req, res) => {
+app.get("/mcp/toolspec.json", (req, res) => {
   res.json({
     tools: [
       {
