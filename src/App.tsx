@@ -134,6 +134,124 @@ function ComparisonTable({ options, isB2B }: { options: any[]; isB2B: boolean })
   );
 }
 
+function InteractiveLoadingScreen({ isB2B }: { isB2B: boolean }) {
+  const [activeStep, setActiveStep] = useState(0);
+  const steps = [
+    { text: "Menginisialisasi CariMurah AI Agent...", desc: "Mempersiapkan mesin pembanding harga otonom" },
+    { text: "Menyisir ribuan toko Tokopedia & Shopee...", desc: "Mencari status ketersediaan barang real-time" },
+    { text: "Menghubungi supplier & distributor grosir...", desc: "Membandingkan penawaran B2B dan eceran terbaik" },
+    { text: "Mengontak jaringan logistik & kargo...", desc: "Mengevaluasi ongkir termurah & estimasi kirim" },
+    { text: "Menganalisis diskon promo harian & voucher khusus...", desc: "Memaksimalkan total potensi penghematan belanja" },
+    { text: "Menyusun draf rekomendasi belanja hemat...", desc: "Memproses data final untuk ditampilkan di layar" }
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveStep((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [steps.length]);
+
+  return (
+    <div className="py-12 text-center space-y-10 max-w-md mx-auto">
+      {/* Dynamic Futuristic Loading Ring */}
+      <div className="relative w-36 h-36 mx-auto">
+        <motion.div 
+          animate={{ scale: [1, 1.25, 1], opacity: [0.15, 0.35, 0.15] }}
+          transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+          className={`absolute inset-0 rounded-full blur-xl ${isB2B ? "bg-indigo-500/30" : "bg-emerald-500/30"}`}
+        />
+        
+        {/* Real Spinner SVG */}
+        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+          <circle 
+            className="text-slate-100 dark:text-white/5" 
+            strokeWidth="6" 
+            stroke="currentColor" 
+            fill="transparent" 
+            r="40" 
+            cx="50" 
+            cy="50" 
+          />
+          <motion.circle 
+            className={isB2B ? "text-indigo-500" : "text-emerald-500"}
+            strokeWidth="6" 
+            strokeDasharray={251.2}
+            strokeDashoffset={251.2 - (251.2 * ((activeStep + 1) / steps.length))}
+            strokeLinecap="round" 
+            stroke="currentColor" 
+            fill="transparent" 
+            r="40" 
+            cx="50" 
+            cy="50"
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+          />
+        </svg>
+
+        {/* Center Sparkles Icon */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+          >
+            <Sparkles className={`w-10 h-10 ${isB2B ? "text-indigo-400" : "text-emerald-400"}`} />
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Dynamic Status Counter/Text */}
+      <div className="space-y-4">
+        <div className="space-y-1 px-4">
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-500"}`}>
+            Agen Belanja Otonom Aktif ({Math.round(((activeStep + 1) / steps.length) * 100)}%)
+          </div>
+          <h4 className="text-xl font-black tracking-tight text-current transition-all duration-300 min-h-[56px] flex items-center justify-center">
+            {steps[activeStep].text}
+          </h4>
+          <p className="text-xs opacity-60 max-w-xs mx-auto">
+            {steps[activeStep].desc}
+          </p>
+        </div>
+      </div>
+
+      {/* Progress Log Container */}
+      <div className={`p-6 rounded-[2.5rem] text-left space-y-3.5 border text-xs ${isB2B ? "bg-white/5 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}>
+        <span className="block text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Daftar Aktivitas Pencarian</span>
+        
+        {steps.map((step, idx) => {
+          const isDone = idx < activeStep;
+          const isCurrent = idx === activeStep;
+          return (
+            <div 
+              key={idx} 
+              className={`flex items-center gap-3 transition-opacity duration-300 ${
+                isDone ? "opacity-100 text-emerald-500 font-semibold" : isCurrent ? "opacity-100 font-bold" : "opacity-30"
+              }`}
+            >
+              <div className="shrink-0 flex items-center">
+                {isDone ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                ) : isCurrent ? (
+                  <Loader2 className={`w-4 h-4 animate-spin ${isB2B ? "text-indigo-400" : "text-emerald-500"}`} />
+                ) : (
+                  <div className={`w-3.5 h-3.5 rounded-full border-2 ${isB2B ? "border-white/20" : "border-slate-300"}`} />
+                )}
+              </div>
+              <span className="truncate">{step.text}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="pt-2">
+         <p className="text-[10px] opacity-40 leading-normal max-w-xs mx-auto">
+            Proses pencarian real-time memakan waktu sekitar 10-30 detik tergantung kelengkapan spesifikasi produk Anda. Mohon jangan menutup halaman ini agar proses perumusan penemuan hemat berjalan sukses.
+         </p>
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_GUEST_PROFILE: UserProfile = {
   uid: "guest",
   displayName: "Guest User",
@@ -185,6 +303,16 @@ export default function App() {
   const [simulatedPromoDays, setSimulatedPromoDays] = useState<number>(0); // 0 = normal day, 1 = Payday, 2 = Double Date 12.12, 3 = Midnight flash sale
   const [negotiationPosture, setNegotiationPosture] = useState<"agresif" | "kolaboratif" | "taktis">("kolaboratif");
   const [copiedNegotiation, setCopiedNegotiation] = useState(false);
+  
+  // Onboarding Modal state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const shown = localStorage.getItem("carimurah_onboarding_shown");
+    if (!shown) {
+      setShowOnboarding(true);
+    }
+  }, []);
   
   // Sandbox login states for preview-safe authentication
   const [showSandboxLogin, setShowSandboxLogin] = useState(false);
@@ -1037,7 +1165,7 @@ export default function App() {
 
                {!user && (
                  <div className="p-6 rounded-3xl bg-amber-50 border border-amber-100 text-amber-900 flex flex-col items-center gap-4">
-                    <p className="text-sm font-medium text-center">Login untuk sinkronkan riwayat belanja Anda di cloud.</p>
+                    <p className="text-sm font-medium text-center">Login untuk menyimpan riwayat belanja Anda secara lokal</p>
                     <button onClick={handleLoginClick} className="bg-amber-600 text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2">
                        <LogIn className="w-4 h-4" /> Login Sekarang
                     </button>
@@ -2575,16 +2703,7 @@ export default function App() {
                )}
 
                {loading && (
-                 <div className="py-20 text-center space-y-8">
-                    <div className="relative w-32 h-32 mx-auto">
-                       <Loader2 className="w-32 h-32 text-emerald-500 animate-spin" />
-                       <div className="absolute inset-0 flex items-center justify-center"><Sparkles className="w-10 h-10 text-emerald-500/20" /></div>
-                    </div>
-                    <div className="space-y-2">
-                       <p className="text-lg font-black italic">Mencari Lubang Penghematan...</p>
-                       <p className="text-xs opacity-40 uppercase tracking-widest font-bold">Menyisir Shopee, Tokopedia, & Jaringan Grosir</p>
-                    </div>
-                 </div>
+                 <InteractiveLoadingScreen isB2B={isB2B} />
                )}
 
                {analysis.batchResult && (
@@ -2968,6 +3087,87 @@ export default function App() {
 
       {/* Bulk Delete Confirmation Modal */}
       <AnimatePresence>
+        {showOnboarding && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-left space-y-6 max-h-[90vh] overflow-y-auto minimal-scrollbar`}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isB2B ? "bg-indigo-500" : "bg-emerald-500"}`}>
+                    <ShoppingBag className="w-5 h-5 text-white" />
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${isB2B ? "text-indigo-400" : "text-emerald-600"}`}>CariMurah.ai Platform</span>
+                </div>
+                <h3 className="text-3xl font-black tracking-tight leading-tight dialog-title">Selamat Datang! 🚀</h3>
+                <p className="text-xs opacity-70 leading-relaxed">
+                  CariMurah.ai adalah asisten cerdas otonom yang siap menyisir internet untuk memangkas pengeluaran eceran dan memaksimalkan cuan bisnis grosir/warung demi menyelamatkan isi dompet Anda.
+                </p>
+              </div>
+
+              {/* Grid 3 Core Features */}
+              <div className="space-y-4 pt-2">
+                <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40">3 Pilar Utama CariMurah</h4>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  {/* Feature 1 */}
+                  <div className={`p-4 rounded-3xl border flex gap-4 items-start ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                     <div className={`p-3 rounded-2xl ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-600"} shrink-0`}>
+                        <Camera className="w-5 h-5" />
+                     </div>
+                     <div className="space-y-1">
+                        <span className="block font-bold text-xs">AI Scan & Voice Input</span>
+                        <p className="text-[11px] opacity-60 leading-relaxed">Pindai struk belanja menggunakan foto kamera, upload file invoice, tanyakan langsung ke asisten AI atau rekam suara daftar belanjaan Anda dalam sekejap.</p>
+                     </div>
+                  </div>
+
+                  {/* Feature 2 */}
+                  <div className={`p-4 rounded-3xl border flex gap-4 items-start ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                     <div className={`p-3 rounded-2xl ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-600"} shrink-0`}>
+                        <TrendingDown className="w-5 h-5" />
+                     </div>
+                     <div className="space-y-1">
+                        <span className="block font-bold text-xs">Real-time Prices & Forecast</span>
+                        <p className="text-[11px] opacity-60 leading-relaxed">Bandingkan harga barang Anda dengan penawaran Shopee, Tokopedia, distributor grosir, serta pantau grafik prediksi harga 7 hari ke depan oleh AI.</p>
+                     </div>
+                  </div>
+
+                  {/* Feature 3 */}
+                  <div className={`p-4 rounded-3xl border flex gap-4 items-start ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                     <div className={`p-3 rounded-2xl ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-600"} shrink-0`}>
+                        <Users className="w-5 h-5" />
+                     </div>
+                     <div className="space-y-1">
+                        <span className="block font-bold text-xs">B2B Procurement (Grosir)</span>
+                        <p className="text-[11px] opacity-60 leading-relaxed">Aktifkan mode grosir untuk mengakses simulasi siklus promo, kalkulasi landed cost, asisten asisten tawar nego pesan, dan draft resmi Request for Quotation (RFQ).</p>
+                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                 <button 
+                   onClick={() => {
+                     localStorage.setItem("carimurah_onboarding_shown", "true");
+                     setShowOnboarding(false);
+                   }}
+                   className={`w-full py-4 bg-gradient-to-r ${isB2B ? "from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-indigo-500/20" : "from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/20"} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-95`}
+                 >
+                    Mulai Berburu Hemat!
+                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showSandboxLogin && (
           <motion.div 
             initial={{ opacity: 0 }}
@@ -2984,11 +3184,11 @@ export default function App() {
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500 mb-2">
-                    Login Mode (Cloud Connected)
+                    Login Mode (LocalStorage Connected)
                   </div>
                   <h3 className="text-2xl font-black tracking-tight dialog-title">Login CariMurah</h3>
                   <p className="text-xs opacity-60 leading-relaxed">
-                    Masukkan email untuk langsung tersambung dan sync informasi ke database atau tetap sebagai tamu dengan menyimpan data hanya di local (tidak disarankan untuk penggunaan jangka panjang). Data yang disimpan secara lokal hanya akan tersimpan di browser ini dan tidak akan bisa diakses jika Anda login dengan email yang berbeda atau menggunakan perangkat lain.
+                    Masuk sebagai tamu untuk menyimpan data hanya di lokal (tidak disarankan untuk penggunaan jangka panjang). Gunakan aplikasi CariMurah agar bisa login menggunakan email dan langsung tersambung ke database.
                   </p>
                 </div>
               </div>
