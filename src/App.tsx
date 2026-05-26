@@ -1983,7 +1983,7 @@ export default function App() {
                         {/* Message container */}
                         <div className={`p-5 rounded-[2rem] text-sm leading-relaxed ${
                           msg.role === "user" 
-                            ? (isB2B ? "bg-indigo-600 text-white rounded-tr-none" : "bg-slate-905 text-white rounded-tr-none")
+                            ? (isB2B ? "bg-indigo-600 text-white rounded-tr-none" : "bg-slate-900 text-white rounded-tr-none")
                             : (isB2B ? "bg-white/5 border border-white/10 text-slate-100 rounded-tl-none" : "bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none")
                         }`}>
                           <div className="markdown-body">
