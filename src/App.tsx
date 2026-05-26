@@ -2219,10 +2219,18 @@ export default function App() {
                                        Beli Sekarang <ExternalLink className="w-4 h-4" />
                                      </a>
                                      {profile?.subscription?.tier !== "FREE" && (
-                                       <button 
+                                       <button
                                          onClick={() => {
                                            if (!watchlist.find(w => w.productName === item.productName)) {
                                              setWatchlist([...watchlist, item]);
+                                             if (typeof pendo !== "undefined") {
+                                               pendo.track("watchlist_item_added", {
+                                                 product_name: item.productName,
+                                                 current_price: item.recommendedPrice,
+                                                 watchlist_size: watchlist.length + 1,
+                                                 user_tier: profile?.subscription?.tier || "FREE"
+                                               });
+                                             }
                                            }
                                          }}
                                          className="w-full py-2 text-[10px] font-black uppercase tracking-widest opacity-40 hover:opacity-100 flex items-center justify-center gap-2"
@@ -2452,6 +2460,14 @@ export default function App() {
                                  navigator.clipboard.writeText(summary);
                                  setShowShareSuccess(true);
                                  setTimeout(() => setShowShareSuccess(false), 2000);
+                                 if (typeof pendo !== "undefined") {
+                                   pendo.track("analysis_report_shared", {
+                                     total_savings_shared: analysis.batchResult.totalPotentialSavings,
+                                     items_count: analysis.batchResult.items.length,
+                                     share_method: "clipboard",
+                                     is_b2b: isB2B
+                                   });
+                                 }
                                }}
                                className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${showShareSuccess ? "bg-emerald-500 text-white" : "bg-indigo-500/20 border border-indigo-500/30 text-white"}`}
                              >
