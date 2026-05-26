@@ -181,6 +181,11 @@ export default function App() {
   const [monthlySummary, setMonthlySummary] = useState<string | null>(null);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   
+  // Interactive Simulator States
+  const [simulatedPromoDays, setSimulatedPromoDays] = useState<number>(0); // 0 = normal day, 1 = Payday, 2 = Double Date 12.12, 3 = Midnight flash sale
+  const [negotiationPosture, setNegotiationPosture] = useState<"agresif" | "kolaboratif" | "taktis">("kolaboratif");
+  const [copiedNegotiation, setCopiedNegotiation] = useState(false);
+  
   // Sandbox login states for preview-safe authentication
   const [showSandboxLogin, setShowSandboxLogin] = useState(false);
   const [sandboxEmail, setSandboxEmail] = useState("Email Kamu");
@@ -384,16 +389,7 @@ export default function App() {
               notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
               b2bFocus: p?.preferences?.b2bFocus || 'price',
               showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
-            },
-            account: {
-              id: u.email?.split('@')[1] || u.uid,
-              name: u.email?.split('@')[1] || 'individual'
             }
-          });
-          pendo.track('user_login_completed', {
-            auth_provider: 'google',
-            is_new_user: !p,
-            user_tier: p?.subscription?.tier || 'FREE'
           });
         }
       }
@@ -411,30 +407,10 @@ export default function App() {
         } else {
           setProfile(DEFAULT_GUEST_PROFILE);
         }
-
-        if (typeof pendo !== "undefined") {
-          const anonId = 'anon-' + (localStorage.getItem('carimurah_anon_id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('carimurah_anon_id', id); return id; })());
-          pendo.identify({
-            visitor: {
-              id: anonId,
-              subscriptionTier: 'FREE',
-              is_guest: true
-            },
-            account: {
-              id: 'guest'
-            }
-          });
-        }
       }
     });
     return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    if (typeof pendo !== "undefined") {
-      pendo.pageLoad();
-    }
-  }, [mode]);
 
   const loadHistoryFromDB = async (uid: string) => {
     try {
@@ -2239,6 +2215,215 @@ export default function App() {
 
                       <ComparisonTable options={allOptions} isB2B={isB2B} />
 
+                      {/* NEW v2.2 CARIMURAH.AI EXCLUSIVE INTERACTIVE MODULES */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4">
+                         {/* Module 1: Interactive Price Cycle & Promo Simulator */}
+                         <div className={`p-8 rounded-[2.5rem] border ${isB2B ? "bg-indigo-950/40 border-indigo-500/20 text-white" : "bg-emerald-50/50 border-emerald-500/20 text-slate-900"} space-y-6 shadow-xl`}>
+                            <div className="flex justify-between items-start">
+                               <div className="space-y-1">
+                                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-600"}`}>
+                                     Predictive Intelligence
+                                  </div>
+                                  <h4 className="text-xl font-black tracking-tight flex items-center gap-2">
+                                     <TrendingDown className="w-5 h-5 text-indigo-400" /> Simulator Siklus Harga Promo
+                                  </h4>
+                               </div>
+                            </div>
+                            
+                            <p className="text-xs opacity-70 leading-relaxed">
+                               Prakiraan harga di masa depan berdasarkan siklus gajian, diskon berkala, dan double dates (6.6, 12.12). Pilih tanggal promo di bawah untuk melihat simulasi sisa proyeksi harga!
+                            </p>
+
+                            {/* Promo Selectors */}
+                            <div className="grid grid-cols-4 gap-2">
+                               {[
+                                 { label: "Normal", desc: "Harga standar", val: 0 },
+                                 { label: "Payday", desc: "Diskon ~8%", val: 1 },
+                                 { label: "Double Date", desc: "Diskon ~15%", val: 2 },
+                                 { label: "Midnight", desc: "Diskon ~20%", val: 3 },
+                               ].map((p, idx) => (
+                                 <button
+                                   key={idx}
+                                   type="button"
+                                   onClick={() => setSimulatedPromoDays(p.val)}
+                                   className={`p-3 rounded-2xl flex flex-col items-center justify-center text-center transition-all cursor-pointer border ${
+                                     simulatedPromoDays === p.val 
+                                       ? (isB2B ? "bg-indigo-600 text-white border-indigo-400 font-bold" : "bg-slate-900 text-white border-slate-950 font-bold") 
+                                       : (isB2B ? "bg-white/5 hover:bg-white/10 border-white/5" : "bg-white hover:bg-slate-100 border-slate-200")
+                                   }`}
+                                 >
+                                   <span className="text-[10px] font-black block">{p.label}</span>
+                                   <span className="text-[8px] opacity-40 leading-none mt-1">{p.desc}</span>
+                                 </button>
+                               ))}
+                            </div>
+
+                            {/* Live Interactive Simulation Display */}
+                            {(() => {
+                              const basePrice = item.recommendedPrice;
+                              let discountFactor = 1;
+                              if (simulatedPromoDays === 1) discountFactor = 0.92;
+                              else if (simulatedPromoDays === 2) discountFactor = 0.85;
+                              else if (simulatedPromoDays === 3) discountFactor = 0.80;
+
+                              const simPrice = Math.round(basePrice * discountFactor);
+                              
+                              // Create mock 7-day projection array centered around the simulation
+                              const days = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+                              const chartData = days.map((day, dIdx) => {
+                                 const dayFactor = 0.97 + (dIdx * 0.012) + (Math.sin(dIdx * 0.8) * 0.015);
+                                 return {
+                                   date: day,
+                                   price: Math.round(simPrice * dayFactor)
+                                 };
+                              });
+
+                              return (
+                                <div className="space-y-4">
+                                   <div className={`p-4 rounded-3xl ${isB2B ? "bg-slate-900 border border-white/5" : "bg-white border border-slate-100"} flex items-center justify-between`}>
+                                      <div>
+                                         <span className="text-[9px] font-black uppercase opacity-40 block">Proyeksi Harga Simulasi</span>
+                                         <span className="text-2xl font-black">Rp {simPrice.toLocaleString("id-ID")}</span>
+                                      </div>
+                                      <div className="text-right">
+                                         <span className="text-[9px] font-black uppercase opacity-40 block">Rekomendasi CariMurah</span>
+                                         <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                            simulatedPromoDays === 0
+                                              ? "bg-amber-500/10 text-amber-500" 
+                                              : "bg-emerald-500/10 text-emerald-500"
+                                         }`}>
+                                            {simulatedPromoDays === 0 ? "Tunggu Promo" : "Beli Sekarang"}
+                                         </span>
+                                      </div>
+                                   </div>
+
+                                   {/* Interactive Recharts Line chart plotting future dates */}
+                                   <div className="h-32 w-full mt-2">
+                                      <ResponsiveContainer width="100%" height="100%">
+                                         <LineChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isB2B ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)"} />
+                                            <XAxis 
+                                              dataKey="date" 
+                                              axisLine={false} 
+                                              tickLine={false} 
+                                              tick={{ fontSize: 9, fontWeight: 900, fill: isB2B ? "#818cf8" : "#10b981" }} 
+                                            />
+                                            <YAxis hide domain={['dataMin - 1000', 'dataMax + 1000']} />
+                                            <RechartsTooltip 
+                                              contentStyle={{ 
+                                                backgroundColor: isB2B ? "#1e1b4b" : "white", 
+                                                borderRadius: "1rem", 
+                                                border: "none", 
+                                                boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+                                                fontSize: "10px",
+                                                fontWeight: "900"
+                                              }}
+                                              itemStyle={{ color: isB2B ? "#818cf8" : "#059669" }}
+                                              labelStyle={{ display: "none" }}
+                                            />
+                                            <Line 
+                                              type="monotone" 
+                                              dataKey="price" 
+                                              stroke={isB2B ? "#818cf8" : "#10b981"} 
+                                              strokeWidth={3} 
+                                              dot={{ r: 4, strokeWidth: 2 }} 
+                                            />
+                                         </LineChart>
+                                      </ResponsiveContainer>
+                                   </div>
+                                </div>
+                              );
+                            })()}
+                         </div>
+
+                         {/* Module 2: AI Bargain & Negotiation Script Helper */}
+                         <div className={`p-8 rounded-[2.5rem] border ${isB2B ? "bg-white/5 border-white/10" : "bg-white border-slate-200"} text-left space-y-6 shadow-xl`}>
+                            <div className="flex justify-between items-start">
+                               <div className="space-y-1">
+                                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-indigo-500/10 text-indigo-500">
+                                     Tawar-Menawar Smart Helper
+                                  </div>
+                                  <h4 className="text-xl font-black tracking-tight flex items-center gap-2">
+                                     <MessageSquare className="w-5 h-5 text-indigo-500" /> Asisten Nego CariMurah
+                                  </h4>
+                                </div>
+                            </div>
+
+                            <p className="text-xs opacity-70 leading-relaxed">
+                               Pilih posture tawar-menawar Anda di bawah demi memicu draf chat negosiasi siap kirim ke penjual di Shopee atau WhatsApp langsung:
+                            </p>
+
+                            {/* Negotiation Posture Selectors */}
+                            <div className="grid grid-cols-3 gap-2">
+                               {[
+                                 { label: "Kolaboratif", posture: "kolaboratif", desc: "Langganan rutin" },
+                                 { label: "Agresif", posture: "agresif", desc: "Langsung CO" },
+                                 { label: "Taktis", posture: "taktis", desc: "Bebas ongkir cargo" },
+                               ].map((post, idx) => (
+                                 <button
+                                   key={idx}
+                                   type="button"
+                                   onClick={() => setNegotiationPosture(post.posture as any)}
+                                   className={`p-3 rounded-2xl flex flex-col items-center justify-center text-center transition-all cursor-pointer border ${
+                                     negotiationPosture === post.posture 
+                                       ? "bg-indigo-600 text-white border-indigo-400 font-black shadow-md shadow-indigo-600/10" 
+                                       : (isB2B ? "bg-white/5 hover:bg-white/10 border-white/5" : "bg-slate-50 hover:bg-slate-100 border-slate-200")
+                                   }`}
+                                 >
+                                   <span className="text-[10px] font-black block">{post.label}</span>
+                                   <span className="text-[8px] opacity-40 leading-none mt-1">{post.desc}</span>
+                                 </button>
+                               ))}
+                            </div>
+
+                            {/* Live Text Script Helper Block */}
+                            {(() => {
+                              let negoText = "";
+                              const brandAndProduct = `${item.brand} ${item.productName}`;
+                              const formattedRecPrice = `Rp ${item.recommendedPrice.toLocaleString("id-ID")}`;
+                              const formattedTargetPrice = `Rp ${Math.round(item.recommendedPrice * 0.95).toLocaleString("id-ID")}`;
+
+                              if (negotiationPosture === "agresif") {
+                                negoText = `Halo Kak, saya tertarik membeli unit "${brandAndProduct}" dalam jumlah besar hari ini. Tapi setelah kami melakukan evaluasi perbandingan harga pasaran, kami dapat penawaran distributor senilai ${formattedRecPrice}.\n\nApakah kami bisa dibantu special price di angka sekitar ${formattedTargetPrice} per unit agar bisa langsung kami selesaikan pembayarannya hari ini juga dan diproses segera? Terima kasih banyak Kak.`;
+                              } else if (negotiationPosture === "kolaboratif") {
+                                negoText = `Selamat siang Kak, salam kenal.\nKami dari tim pengadaan sedang memetakan mitra pemasok (supplier) tetap jangka panjang untuk produk "${brandAndProduct}". Ke depannya kami memproyeksikan restock kebutuhan unit ini secara periodik.\n\nApakah ada skema harga grosir khusus jika kami berkomitmen untuk langganan rutin? Jika harganya bisa dibantu mendekati ${formattedRecPrice}, kami sangat berbesar hati untuk menjadikan toko Kakak sebagai vendor utama kami. Mohon infonya ya Kak, terima kasih!`;
+                              } else {
+                                negoText = `Halo Kak, terkait produk "${brandAndProduct}" yang ingin kami pesan. Jika harganya kami ambil di nominal ${formattedRecPrice}, apakah toko Kakak bisa memberikan benefit tambahan berupa gratis ongkos kirim cargo untuk pembelian grosir ini? Atau jika harganya bisa disesuaikan ke ${formattedTargetPrice}, kami bersedia langsung check-out tunai sore ini Kak. Ditunggu kabar baiknya ya, terima kasih banyak!`;
+                              }
+
+                              return (
+                                <div className="space-y-4">
+                                   <div className={`p-5 rounded-3xl ${isB2B ? "bg-slate-900 border border-white/5" : "bg-slate-50 border border-slate-200"} relative`}>
+                                      <p className="text-xs font-mono leading-relaxed whitespace-pre-wrap opacity-90 text-left select-all">
+                                         {negoText}
+                                      </p>
+                                   </div>
+
+                                   <button 
+                                     type="button"
+                                     onClick={() => {
+                                        navigator.clipboard.writeText(negoText);
+                                        setCopiedNegotiation(true);
+                                        setTimeout(() => setCopiedNegotiation(false), 2000);
+                                     }}
+                                     className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-600/20 active:scale-95"
+                                   >
+                                      {copiedNegotiation ? (
+                                        <>
+                                           <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Tersalin ke Clipboard!
+                                        </>
+                                      ) : (
+                                        <>
+                                           <FileText className="w-4 h-4" /> Salin Template Nego
+                                        </>
+                                      )}
+                                   </button>
+                                </div>
+                              );
+                            })()}
+                         </div>
+                      </div>
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                          <div className="p-8 rounded-[2.5rem] bg-slate-900 text-white space-y-6">
                             <h4 className="text-xs font-black uppercase tracking-widest opacity-40">Fitur & Spesifikasi</h4>
@@ -2327,14 +2512,6 @@ export default function App() {
                             const subs = { tier: "PRO" as const, expiresAt: new Date(Date.now() + 30*24*60*60*1000).toISOString() };
                             setProfile({ ...profile, subscription: subs });
                             updateProfile(user.uid, { subscription: subs });
-                            if (typeof pendo !== "undefined") {
-                              pendo.track('subscription_upgraded', {
-                                new_tier: 'PRO',
-                                previous_tier: profile?.subscription?.tier || 'FREE',
-                                price: 49000,
-                                currency: 'IDR'
-                              });
-                            }
                             setMode(null);
                          }
                        }}
@@ -2367,14 +2544,6 @@ export default function App() {
                              const subs = { tier: "ENTERPRISE" as const, expiresAt: new Date(Date.now() + 365*24*60*60*1000).toISOString() };
                              setProfile({ ...profile, subscription: subs });
                              updateProfile(user.uid, { subscription: subs });
-                             if (typeof pendo !== "undefined") {
-                               pendo.track('subscription_upgraded', {
-                                 new_tier: 'ENTERPRISE',
-                                 previous_tier: profile?.subscription?.tier || 'FREE',
-                                 price: 1490000,
-                                 currency: 'IDR'
-                               });
-                             }
                              setMode(null);
                           }
                         }}
