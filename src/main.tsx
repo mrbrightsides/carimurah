@@ -5,7 +5,7 @@ import './index.css';
 
 pendo.initialize({
   visitor: {
-    id: ''
+    id: 'anon-' + (localStorage.getItem('carimurah_anon_id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('carimurah_anon_id', id); return id; })())
   }
 });
 

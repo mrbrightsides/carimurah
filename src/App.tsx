@@ -384,7 +384,16 @@ export default function App() {
               notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
               b2bFocus: p?.preferences?.b2bFocus || 'price',
               showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
+            },
+            account: {
+              id: u.email?.split('@')[1] || u.uid,
+              name: u.email?.split('@')[1] || 'individual'
             }
+          });
+          pendo.track('user_login_completed', {
+            auth_provider: 'google',
+            is_new_user: !p,
+            user_tier: p?.subscription?.tier || 'FREE'
           });
         }
       }
@@ -402,10 +411,30 @@ export default function App() {
         } else {
           setProfile(DEFAULT_GUEST_PROFILE);
         }
+
+        if (typeof pendo !== "undefined") {
+          const anonId = 'anon-' + (localStorage.getItem('carimurah_anon_id') || (() => { const id = crypto.randomUUID(); localStorage.setItem('carimurah_anon_id', id); return id; })());
+          pendo.identify({
+            visitor: {
+              id: anonId,
+              subscriptionTier: 'FREE',
+              is_guest: true
+            },
+            account: {
+              id: 'guest'
+            }
+          });
+        }
       }
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (typeof pendo !== "undefined") {
+      pendo.pageLoad();
+    }
+  }, [mode]);
 
   const loadHistoryFromDB = async (uid: string) => {
     try {
@@ -2298,6 +2327,14 @@ export default function App() {
                             const subs = { tier: "PRO" as const, expiresAt: new Date(Date.now() + 30*24*60*60*1000).toISOString() };
                             setProfile({ ...profile, subscription: subs });
                             updateProfile(user.uid, { subscription: subs });
+                            if (typeof pendo !== "undefined") {
+                              pendo.track('subscription_upgraded', {
+                                new_tier: 'PRO',
+                                previous_tier: profile?.subscription?.tier || 'FREE',
+                                price: 49000,
+                                currency: 'IDR'
+                              });
+                            }
                             setMode(null);
                          }
                        }}
@@ -2330,6 +2367,14 @@ export default function App() {
                              const subs = { tier: "ENTERPRISE" as const, expiresAt: new Date(Date.now() + 365*24*60*60*1000).toISOString() };
                              setProfile({ ...profile, subscription: subs });
                              updateProfile(user.uid, { subscription: subs });
+                             if (typeof pendo !== "undefined") {
+                               pendo.track('subscription_upgraded', {
+                                 new_tier: 'ENTERPRISE',
+                                 previous_tier: profile?.subscription?.tier || 'FREE',
+                                 price: 1490000,
+                                 currency: 'IDR'
+                               });
+                             }
                              setMode(null);
                           }
                         }}
