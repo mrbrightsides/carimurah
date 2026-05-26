@@ -384,10 +384,12 @@ export default function App() {
               notifyOnBetterPrices: p?.preferences?.notifyOnBetterPrices ?? true,
               b2bFocus: p?.preferences?.b2bFocus || 'price',
               showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
+              is_guest: false,
             },
             account: {
               id: u.email?.split('@')[1] || u.uid,
-              name: u.email?.split('@')[1] || 'individual'
+              name: u.email?.split('@')[1] || 'individual',
+              account_name: u.email?.split('@')[1] || 'individual'
             }
           });
           pendo.track('user_login_completed', {
@@ -421,7 +423,8 @@ export default function App() {
               is_guest: true
             },
             account: {
-              id: 'guest'
+              id: 'guest',
+              account_name: 'guest'
             }
           });
         }
