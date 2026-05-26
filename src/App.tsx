@@ -2815,11 +2815,11 @@ export default function App() {
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500 mb-2">
-                    Sandbox Mode (Cloud Connected)
+                    Login Mode (Cloud Connected)
                   </div>
-                  <h3 className="text-2xl font-black tracking-tight dialog-title">Login Cloud Safe</h3>
+                  <h3 className="text-2xl font-black tracking-tight dialog-title">Login CariMurah</h3>
                   <p className="text-xs opacity-60 leading-relaxed">
-                    Karena aplikasi berjalan di domain preview AI Studio, Firebase Auth membatasi login pop-up Google. Masukkan email Anda untuk langsung tersambung dan sync data ke **MongoDB Atlas** Anda!
+                    Masukkan email untuk langsung tersambung dan sync informasi ke database atau tetap sebagai tamu dengan menyimpan data hanya di local (tidak disarankan untuk penggunaan jangka panjang). Data yang disimpan secara lokal hanya akan tersimpan di browser ini dan tidak akan bisa diakses jika Anda login dengan email yang berbeda atau menggunakan perangkat lain.
                   </p>
                 </div>
               </div>
@@ -2861,7 +2861,7 @@ export default function App() {
                     type="submit"
                     className="py-3.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-indigo-500/20"
                   >
-                    Masuk Sandbox
+                    Masuk
                   </button>
                 </div>
               </form>
