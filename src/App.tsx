@@ -364,6 +364,13 @@ export default function App() {
       }
     });
     
+    if (typeof pendo !== "undefined") {
+      pendo.track("user_login_completed", {
+        method: "sandbox",
+        visitor_id: mockUid,
+        email: sandboxEmail
+      });
+    }
     setShowSandboxLogin(false);
   };
 
@@ -518,6 +525,11 @@ export default function App() {
               b2bFocus: p?.preferences?.b2bFocus || 'price',
               showTrendChartsByDefault: p?.preferences?.showTrendChartsByDefault ?? false,
             }
+          });
+          pendo.track("user_login_completed", {
+            method: "google_oauth",
+            visitor_id: u.uid,
+            email: u.email || ''
           });
         }
       }
@@ -2645,12 +2657,19 @@ export default function App() {
                         <li className="text-xs flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-emerald-400" /> Watchlist Alert Unlimit</li>
                         <li className="text-xs flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-emerald-400" /> WhatsApp Price Drop Alerts</li>
                      </ul>
-                     <button 
+                     <button
                        onClick={() => {
                          if (user && profile) {
                             const subs = { tier: "PRO" as const, expiresAt: new Date(Date.now() + 30*24*60*60*1000).toISOString() };
                             setProfile({ ...profile, subscription: subs });
                             updateProfile(user.uid, { subscription: subs });
+                            if (typeof pendo !== "undefined") {
+                              pendo.track("subscription_upgraded", {
+                                tier: "PRO",
+                                price: 49000,
+                                upgrade_source: "pricing_page"
+                              });
+                            }
                             setMode(null);
                          }
                        }}
@@ -2677,12 +2696,19 @@ export default function App() {
                          <li className="text-xs flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-200" /> Sistem Auto-RFQ Multi Supplier</li>
                          <li className="text-xs flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-200" /> Laporan Audit P&L Bulanan</li>
                       </ul>
-                      <button 
+                      <button
                         onClick={() => {
                           if (user && profile) {
                              const subs = { tier: "ENTERPRISE" as const, expiresAt: new Date(Date.now() + 365*24*60*60*1000).toISOString() };
                              setProfile({ ...profile, subscription: subs });
                              updateProfile(user.uid, { subscription: subs });
+                             if (typeof pendo !== "undefined") {
+                               pendo.track("subscription_upgraded", {
+                                 tier: "ENTERPRISE",
+                                 price: 1490000,
+                                 upgrade_source: "pricing_page"
+                               });
+                             }
                              setMode(null);
                           }
                         }}
