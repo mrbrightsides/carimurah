@@ -1653,6 +1653,17 @@ export default function App() {
                         </div>
                      </div>
                   </div>
+
+                  {/* AI Compliance Disclaimer Section */}
+                  <div className={`p-6 rounded-[2rem] border flex gap-4 items-start ${isB2B ? "bg-amber-500/10 border-amber-500/20 text-amber-200" : "bg-amber-50/50 border-amber-100 text-slate-700"}`}>
+                     <AlertCircle className={`w-5 h-5 shrink-0 ${isB2B ? "text-amber-400" : "text-amber-600"}`} />
+                     <div className="space-y-1">
+                        <span className="block font-black text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">Pemberitahuan Kepatuhan AI</span>
+                        <p className="text-[11px] opacity-85 leading-relaxed">
+                           CariMurah.ai ditenagai oleh kecerdasan buatan (AI) yang terus memproses berbagai data promosi dan harga secara dinamis. Perlu diperhatikan bahwa AI dapat melakukan kesalahan analisis, penafsiran harga, atau proyeksi tren. Selalu periksa kembali semua informasi dan lakukan konfirmasi dengan pihak penjual/distributor resmi sebelum melakukan keputusan pembelian.
+                        </p>
+                     </div>
+                  </div>
                </div>
             </motion.section>
           ) : !mode && !analysis ? (
