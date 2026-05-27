@@ -3147,7 +3147,7 @@ export default function App() {
                      </div>
                      <div className="space-y-1">
                         <span className="block font-bold text-xs">B2B Procurement (Grosir)</span>
-                        <p className="text-[11px] opacity-60 leading-relaxed">Aktifkan mode grosir untuk mengakses simulasi siklus promo, kalkulasi landed cost, asisten asisten tawar nego pesan, dan draft resmi Request for Quotation (RFQ).</p>
+                        <p className="text-[11px] opacity-60 leading-relaxed">Aktifkan mode grosir untuk mengakses simulasi siklus promo, kalkulasi landed cost, asisten tawar nego harga, dan draft resmi Request for Quotation (RFQ).</p>
                      </div>
                   </div>
                 </div>
