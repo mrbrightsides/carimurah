@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CariMurah</string>
+    <string name="title_activity_main">CariMurah</string>
+    <string name="package_name">com.carimurah.app</string>
+    <string name="custom_url_scheme">com.carimurah.app</string>
+</resources>
