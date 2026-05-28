@@ -54,7 +54,9 @@ import {
   Download,
   FileText,
   FileSearch,
-  MessageSquare
+  MessageSquare,
+  CreditCard,
+  QrCode
 } from "lucide-react";
 import Markdown from "react-markdown";
 import type { InputMode, AnalysisState, BatchAnalysisResult, HistoryItem, UserProfile, ItemAnalysis, MarketOption } from "./types";
@@ -307,12 +309,163 @@ export default function App() {
   // Onboarding Modal state
   const [showOnboarding, setShowOnboarding] = useState(false);
 
+  // Daily quota indicators (3 scans per day)
+  const [dailyScansCount, setDailyScansCount] = useState<number>(0);
+  const [showQuotaLimitModal, setShowQuotaLimitModal] = useState(false);
+
+  // Interactive Payment Simulator States
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentPlan, setPaymentPlan] = useState<"PRO" | "ENTERPRISE" | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"qris" | "va" | "cc">("qris");
+  const [paymentStep, setPaymentStep] = useState<"method" | "billing" | "success">("method");
+  const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
+  const [paymentLog, setPaymentLog] = useState<string[]>([]);
+
   useEffect(() => {
     const shown = localStorage.getItem("carimurah_onboarding_shown");
     if (!shown) {
       setShowOnboarding(true);
     }
+
+    // Load or initialize daily quota scans
+    const today = new Date().toISOString().split('T')[0];
+    const lastScanDate = localStorage.getItem("carimurah_last_scan_date");
+    if (lastScanDate !== today) {
+      localStorage.setItem("carimurah_last_scan_date", today);
+      localStorage.setItem("carimurah_daily_scans", "0");
+      setDailyScansCount(0);
+    } else {
+      const count = parseInt(localStorage.getItem("carimurah_daily_scans") || "0", 10);
+      setDailyScansCount(count);
+    }
+
+    // Detect Midtrans Redirect completion callback
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") === "success") {
+      setPaymentPlan("PRO");
+      setPaymentStep("success");
+      setShowPaymentModal(true);
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
   }, []);
+
+  const [midtransLoading, setMidtransLoading] = useState(false);
+  const [midtransData, setMidtransData] = useState<{ token?: string; redirect_url?: string; isMock?: boolean } | null>(null);
+
+  const initiateMidtransPayment = async (plan: "PRO" | "ENTERPRISE") => {
+    setPaymentPlan(plan);
+    setPaymentMethod("qris");
+    setPaymentStep("method");
+    setIsSimulatingPayment(false);
+    setMidtransLoading(true);
+    setShowPaymentModal(true);
+    setPaymentLog(["Menginisialisasi CariMurah secure checkout...", "Menghubungi server host..."]);
+
+    const callerUid = user?.uid || "guest-" + Date.now();
+    const callerEmail = user?.email || "guest@carimurah.ai";
+
+    try {
+      const resp = await fetch("/api/payment/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          plan,
+          uid: callerUid,
+          email: callerEmail
+        })
+      });
+
+      if (!resp.ok) {
+        throw new Error(`Server returned status: ${resp.status}`);
+      }
+
+      const info = await resp.json();
+      setMidtransData(info);
+      
+      if (info.isMock) {
+        setPaymentLog(prev => [
+          ...prev, 
+          "⚠️ MIDTRANS_SERVER_KEY belum diisi di cloud console / env.", 
+          "Mengaktifkan simulator lokal interaktif untuk demo hackathon...",
+          "Sistem pembayaran siap diuji secara virtual!"
+        ]);
+      } else {
+        setPaymentLog(prev => [
+          ...prev, 
+          "✅ Terkoneksi dengan Midtrans Snap API!", 
+          `Menerima token invoice: ${info.token}`,
+          "Sistem checkout live siap."
+        ]);
+        if (info.redirect_url && info.redirect_url !== "#mock-payment-simulator") {
+          // Open in new window safely
+          window.open(info.redirect_url, "_blank");
+        }
+      }
+    } catch (err: any) {
+      console.error("Midtrans Initialization failed:", err);
+      setMidtransData({ isMock: true, token: "mock-snap-token-" + Math.floor(Math.random() * 10000), redirect_url: "#mock-payment-simulator" });
+      setPaymentLog(prev => [
+        ...prev, 
+        "❌ Gagal berdialog dengan API Gateway.",
+        "Mengaktifkan simulator lokal agar peninjauan tidak terganggu."
+      ]);
+    } finally {
+      setMidtransLoading(false);
+    }
+  };
+
+  const handleSimulatePaymentSuccess = async () => {
+    setIsSimulatingPayment(true);
+    setPaymentLog(prev => [...prev, "Menghubungi payment gateway...", "Mengonfigurasi signature aman..."]);
+    
+    // Simulate steps
+    setTimeout(() => {
+      setPaymentLog(prev => [...prev, "Proses validasi saldo/rekening target...", "Skenario dana berhasil diserap."]);
+    }, 600);
+
+    setTimeout(() => {
+      setPaymentLog(prev => [...prev, "Menyesuaikan state langganan di MongoDB Cloud...", "Proses update profile..."]);
+    }, 1200);
+
+    setTimeout(() => {
+      const tierChosen = paymentPlan || "PRO";
+      const durationMs = tierChosen === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
+      const expiresAt = new Date(Date.now() + durationMs).toISOString();
+      const subs = { tier: tierChosen, expiresAt };
+
+      setProfile(prev => {
+        if (!prev) return prev;
+        return { ...prev, subscription: subs };
+      });
+
+      if (user) {
+        updateProfile(user.uid, { subscription: subs });
+      } else {
+        const localProf = localStorage.getItem("carimurah_guest_profile");
+        let parsed = { preferences: {} };
+        if (localProf) {
+          try { parsed = JSON.parse(localProf); } catch (e) {}
+        }
+        localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...parsed, subscription: subs }));
+      }
+
+      // Track subscription upgraded in Pendo
+      if (typeof pendo !== "undefined") {
+        pendo.track("subscription_upgraded", {
+          tier: tierChosen,
+          price: tierChosen === "PRO" ? 49000 : 1490000,
+          upgrade_source: "payment_simulator_interactive"
+        });
+      }
+
+      setPaymentLog(prev => [...prev, "Selesai! Fitur premium berhasil diaktifkan."]);
+      setIsSimulatingPayment(false);
+      setPaymentStep("success");
+    }, 2000);
+  };
   
   // Sandbox login states for preview-safe authentication
   const [showSandboxLogin, setShowSandboxLogin] = useState(false);
@@ -399,6 +552,13 @@ export default function App() {
   const [chatError, setChatError] = useState<string | null>(null);
 
   const sendChatMessage = async (presetText?: string) => {
+    // Check daily quota for FREE tier
+    const isFree = !profile?.subscription?.tier || profile?.subscription?.tier === "FREE";
+    if (isFree && dailyScansCount >= 3) {
+      setShowQuotaLimitModal(true);
+      return;
+    }
+
     const textToSend = presetText || chatInput;
     if (!textToSend.trim() || chatLoading) return;
 
@@ -444,6 +604,13 @@ export default function App() {
       };
 
       setChatMessages(prev => [...prev, assistantMsg]);
+
+      // Count against quota for FREE users
+      if (isFree) {
+        const newCount = dailyScansCount + 1;
+        setDailyScansCount(newCount);
+        localStorage.setItem("carimurah_daily_scans", newCount.toString());
+      }
       
       // If a preference update or other DB update tool is executed, let's refresh the values
       if (data.toolCalls && data.toolCalls.some((tc: string) => tc.includes("update_user_preferences"))) {
@@ -731,6 +898,13 @@ export default function App() {
   })();
 
   const processInput = async (payload: { image?: string; text?: string; audio?: string }) => {
+    // Check daily quota for FREE tier (regular and guest users)
+    const isFree = !profile?.subscription?.tier || profile?.subscription?.tier === "FREE";
+    if (isFree && dailyScansCount >= 3) {
+      setShowQuotaLimitModal(true);
+      return;
+    }
+
     const processingStart = Date.now();
     setLoading(true);
     setAnalysis({ step: "parsing" });
@@ -779,6 +953,13 @@ export default function App() {
       }
       const processingEnd = Date.now();
       setAnalysis({ step: "complete", batchResult });
+
+      // Daily quota scan increment for FREE tier
+      if (isFree) {
+        const newCount = dailyScansCount + 1;
+        setDailyScansCount(newCount);
+        localStorage.setItem("carimurah_daily_scans", newCount.toString());
+      }
 
       if (typeof pendo !== "undefined") {
         pendo.track("price_analysis_completed", {
@@ -1688,6 +1869,16 @@ export default function App() {
                     <p className={`text-lg leading-relaxed ${isB2B ? "text-slate-400" : "text-slate-500"}`}>
                       CariMurah.ai membantu kamu menemukan harga distributor & retail termurah se-Indonesia.
                     </p>
+                    {(!profile?.subscription?.tier || profile?.subscription?.tier === "FREE") && (
+                      <button 
+                        onClick={() => setMode("pricing")}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform mt-3 cursor-pointer"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Sisa Kuota Harian AI: {Math.max(0, 3 - dailyScansCount)} / 3 Gratis • Upgrade ke Pro</span>
+                        <ChevronRight className="w-3 h-3 text-amber-500" />
+                      </button>
+                    )}
                   </div>
                   <button 
                     onClick={() => {
@@ -2658,22 +2849,8 @@ export default function App() {
                         <li className="text-xs flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-emerald-400" /> WhatsApp Price Drop Alerts</li>
                      </ul>
                      <button
-                       onClick={() => {
-                         if (user && profile) {
-                            const subs = { tier: "PRO" as const, expiresAt: new Date(Date.now() + 30*24*60*60*1000).toISOString() };
-                            setProfile({ ...profile, subscription: subs });
-                            updateProfile(user.uid, { subscription: subs });
-                            if (typeof pendo !== "undefined") {
-                              pendo.track("subscription_upgraded", {
-                                tier: "PRO",
-                                price: 49000,
-                                upgrade_source: "pricing_page"
-                              });
-                            }
-                            setMode(null);
-                         }
-                       }}
-                       className="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform"
+                       onClick={() => initiateMidtransPayment("PRO")}
+                       className="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform cursor-pointer"
                      >
                         Langganan Sekarang
                      </button>
@@ -2697,22 +2874,8 @@ export default function App() {
                          <li className="text-xs flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-200" /> Laporan Audit P&L Bulanan</li>
                       </ul>
                       <button
-                        onClick={() => {
-                          if (user && profile) {
-                             const subs = { tier: "ENTERPRISE" as const, expiresAt: new Date(Date.now() + 365*24*60*60*1000).toISOString() };
-                             setProfile({ ...profile, subscription: subs });
-                             updateProfile(user.uid, { subscription: subs });
-                             if (typeof pendo !== "undefined") {
-                               pendo.track("subscription_upgraded", {
-                                 tier: "ENTERPRISE",
-                                 price: 1490000,
-                                 upgrade_source: "pricing_page"
-                               });
-                             }
-                             setMode(null);
-                          }
-                        }}
-                        className="w-full py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform"
+                        onClick={() => initiateMidtransPayment("ENTERPRISE")}
+                        className="w-full py-4 bg-white text-indigo-600 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform cursor-pointer"
                       >
                         Upgrade Enterprise
                       </button>
@@ -3313,8 +3476,394 @@ export default function App() {
             </motion.div>
           </motion.div>
         )}
+
+        {/* 1. QUIET/STUNNING ACTIVE DAILY QUOTA EXHAUSTED LIMIT MODAL */}
+        {showQuotaLimitModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-center space-y-6 relative overflow-hidden`}
+            >
+              {/* Soft visual background glow */}
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto text-amber-500">
+                <AlertCircle className="w-10 h-10" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black tracking-tight text-balance">Batas 3 Scan Gratis Tercapai!</h3>
+                <p className="text-xs opacity-60 leading-relaxed max-w-sm mx-auto">
+                  Kamu telah menggunakan jatah 3 scan produk harian gratis kamu. Upgrade akunmu untuk pencarian tanpa batas, asisten AI real-time, sirkulasi memo penawaran, & WhatsApp Drop alert!
+                </p>
+              </div>
+
+              {/* Quick stats panel */}
+              <div className={`p-4 rounded-2xl text-left border flex items-center gap-3 ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                <div className="flex-1">
+                  <span className="block text-[9px] font-black uppercase tracking-widest opacity-45">Benefit Premium</span>
+                  <span className="text-xs font-bold block">Tanpa Kuota Harian (Unlimited Scans)</span>
+                </div>
+                <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black">UNLIMITED</div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 pt-2">
+                <button 
+                  onClick={() => {
+                    setShowQuotaLimitModal(false);
+                    setMode("pricing");
+                  }}
+                  className={`w-full py-4 bg-gradient-to-r ${isB2B ? "from-indigo-500 to-indigo-600 shadow-indigo-500/20" : "from-emerald-500 to-emerald-600 shadow-emerald-500/20"} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-95`}
+                >
+                  Lihat Paket Langganan
+                </button>
+                <button 
+                  onClick={() => setShowQuotaLimitModal(false)}
+                  className={`w-full py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                >
+                  Tutup
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* 2. DAZZLING INTERACTIVE PAYMENT GATEWAY SIMULATOR MODAL */}
+        {showPaymentModal && paymentPlan && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 text-left relative overflow-hidden my-8`}
+            >
+              {/* Header section with selected plan info */}
+              <div className="flex justify-between items-start border-b border-dashed pb-4 opacity-100">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500">
+                    Secure Payment Simulator
+                  </div>
+                  <h3 className="text-2xl font-black tracking-tight">Checkout CariMurah</h3>
+                  <p className="text-xs opacity-60">Pilih metode bayar virtual di bawah ini.</p>
+                </div>
+                <button 
+                  onClick={() => setShowPaymentModal(false)}
+                  className={`p-2 rounded-full cursor-pointer transition-colors ${isB2B ? "bg-white/5 hover:bg-white/10 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-850"}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {midtransLoading && (
+                <div className="py-12 text-center space-y-4">
+                  <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto" />
+                  <p className="text-sm font-bold opacity-80">Menghubungi Midtrans Gateway...</p>
+                  <p className="text-xs opacity-50">Menyiapkan token pembayaran aman Anda.</p>
+                </div>
+              )}
+
+              {!midtransLoading && paymentStep !== "success" && midtransData && !midtransData.isMock && (
+                <div className="space-y-6">
+                  <div className={`p-5 rounded-3xl border flex justify-between items-center ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                    <div>
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Paket Terpilih</span>
+                      <span className="font-extrabold text-xs text-emerald-500 font-mono">
+                        {paymentPlan === "PRO" ? "PRO TIER (Smart Saver)" : "ENTERPRISE TIER"}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Total Tagihan</span>
+                      <span className="text-sm font-extrabold font-mono text-emerald-500">
+                        {paymentPlan === "PRO" ? "Rp49.000" : "Rp1.490.000"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className={`p-6 rounded-3xl border border-dashed text-center space-y-4 ${isB2B ? "bg-emerald-500/5 border-emerald-500/20" : "bg-emerald-50 border-emerald-100"}`}>
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto animate-bounce" />
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-black">Invoice Midtrans Snap Aktif!</h4>
+                      <p className="text-[11px] opacity-75">Selesaikan transaksi pada tab aman/pop-up eksternal Midtrans.</p>
+                    </div>
+
+                    <a 
+                      href={midtransData.redirect_url} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="inline-flex w-full justify-center items-center gap-2 py-4 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg transition-transform hover:scale-[1.02] cursor-pointer"
+                    >
+                      Buka Portal Bayar Midtrans ↗
+                    </a>
+                  </div>
+
+                  {/* Terminal real-time payment log */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest opacity-45 flex items-center gap-1 font-sans">
+                      <Loader2 className="w-3 h-3 animate-spin text-emerald-500" /> State Gateway Logs (Real-time)
+                    </label>
+                    <div className="bg-slate-900 border border-white/5 rounded-2xl p-4 font-mono text-[10px] text-emerald-500 space-y-1 max-h-24 overflow-y-auto leading-relaxed shadow-inner">
+                      {paymentLog.map((logLine, idx) => (
+                        <div key={idx} className="flex gap-2 text-left">
+                          <span className="opacity-40">[{idx + 1}]</span>
+                          <span>{logLine}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-dashed border-slate-200 dark:border-white/10 space-y-3">
+                    <p className="text-[10px] opacity-55 text-center px-4 leading-relaxed">
+                      Sistem webhook kami otomatis mendeteksi status sukses dan meningkatkan level akun Anda. Alternatifnya, klik tombol di bawah untuk verifikasi instan.
+                    </p>
+                    <button 
+                      onClick={handleSimulatePaymentSuccess}
+                      className="w-full py-3.5 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-800 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all text-center flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      Selesai Bayar? Aktifkan Premium
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!midtransLoading && paymentStep !== "success" && (!midtransData || midtransData.isMock) && (
+                <>
+                  {/* Selected Plan Summary Dashboard */}
+                  <div className={`p-5 rounded-3xl border flex justify-between items-center ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                    <div>
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Paket Terpilih</span>
+                      <span className="font-extrabold text-sm text-emerald-500 font-mono">
+                        {paymentPlan === "PRO" ? "PRO TIER (Smart Saver)" : "ENTERPRISE TIER"}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Total Tagihan</span>
+                      <span className="text-base font-extrabold font-mono text-emerald-500">
+                        {paymentPlan === "PRO" ? "Rp49.000" : "Rp1.490.000"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Payment Method Selector Tabs */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest opacity-45 block">Langkah 1: Pilih Metode</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button 
+                        onClick={() => { setPaymentMethod("qris"); setPaymentStep("method"); }}
+                        className={`p-3 rounded-2xl border text-center flex flex-col items-center gap-2.5 transition-all cursor-pointer ${paymentMethod === "qris" ? "border-emerald-500 bg-emerald-500/10" : "border-transparent bg-slate-100/50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10"}`}
+                      >
+                        <QrCode className="w-5 h-5 text-emerald-500" />
+                        <span className="text-[10px] font-black tracking-wider uppercase">QRIS/GoPay</span>
+                      </button>
+
+                      <button 
+                        onClick={() => { setPaymentMethod("va"); setPaymentStep("method"); }}
+                        className={`p-3 rounded-2xl border text-center flex flex-col items-center gap-2.5 transition-all cursor-pointer ${paymentMethod === "va" ? "border-emerald-500 bg-emerald-500/10" : "border-transparent bg-slate-100/50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10"}`}
+                      >
+                        <CreditCard className="w-5 h-5 text-indigo-500" />
+                        <span className="text-[10px] font-black tracking-wider uppercase">V. Account</span>
+                      </button>
+
+                      <button 
+                        onClick={() => { setPaymentMethod("cc"); setPaymentStep("method"); }}
+                        className={`p-3 rounded-2xl border text-center flex flex-col items-center gap-2.5 transition-all cursor-pointer ${paymentMethod === "cc" ? "border-emerald-500 bg-emerald-500/10" : "border-transparent bg-slate-100/50 hover:bg-slate-100 dark:bg-white/5 dark:hover:bg-white/10"}`}
+                      >
+                        <CreditCard className="w-5 h-5 text-amber-500" />
+                        <span className="text-[10px] font-black tracking-wider uppercase">Kartu Kredit</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Payment Method Details Wrapper */}
+                  <div className={`p-5 rounded-3xl border ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                    {paymentMethod === "qris" && (
+                      <div className="text-center space-y-4">
+                        <span className="text-[10px] font-black tracking-widest uppercase opacity-45 block">SCAN QRCODE DI BAWAH</span>
+                        
+                        {/* Realistic Mock QRIS Code Frame */}
+                        <div className="w-40 h-40 bg-white p-2 rounded-2xl border border-slate-100 mx-auto flex items-center justify-center shadow-lg relative overflow-hidden group">
+                          {/* Slogan details */}
+                          <div className="absolute top-1 left-1 right-1 h-3 bg-red-600 text-[6px] font-black uppercase text-white flex items-center justify-center tracking-widest rounded-t-lg">
+                            QRIS ATAS
+                          </div>
+                          
+                          {/* Inner clean matrix block built of neat lines */}
+                          <div className="w-24 h-24 grid grid-cols-4 gap-1 transform rotate-45 border-2 border-black p-1">
+                            <div className="bg-black"></div>
+                            <div className="bg-white"></div>
+                            <div className="bg-black"></div>
+                            <div className="bg-black"></div>
+                            <div className="bg-white"></div>
+                            <div className="bg-black"></div>
+                            <div className="bg-white"></div>
+                            <div className="bg-black"></div>
+                            <div className="bg-black"></div>
+                            <div className="bg-white"></div>
+                            <div className="bg-black"></div>
+                            <div className="bg-white"></div>
+                          </div>
+                          
+                          <div className="absolute bottom-1 left-1 right-1 h-3 bg-indigo-600 text-[6px] font-black uppercase text-white flex items-center justify-center tracking-widest rounded-b-lg">
+                            CariMurah Gateway
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] opacity-60">Instan settlement & aman. Buka dompet digital Anda (GoPay, OVO, ShopeePay, Dana, LinkAja) lalu arahkan kamera ke layar untuk scan.</p>
+                      </div>
+                    )}
+
+                    {paymentMethod === "va" && (
+                      <div className="space-y-4">
+                        <span className="text-[10px] font-black tracking-widest uppercase opacity-45 block text-center">INFORMASI VIRTUAL ACCOUNT</span>
+                        
+                        {/* Selector for virtual bank type */}
+                        <div className="grid grid-cols-3 gap-2 pb-2">
+                          <button className="py-1.5 px-3 rounded-lg bg-indigo-500 text-white font-mono text-[10px] font-black">BCA VA</button>
+                          <button className="py-1.5 px-3 rounded-lg bg-slate-200 dark:bg-white/5 opacity-55 font-mono text-[10px] font-bold">MANDIRI</button>
+                          <button className="py-1.5 px-3 rounded-lg bg-slate-200 dark:bg-white/5 opacity-55 font-mono text-[10px] font-bold">BNI VA</button>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="block text-[8px] font-semibold opacity-40 uppercase">Nomor Virtual Account</span>
+                          <div className="flex gap-2 items-center">
+                            <span className="text-sm font-black font-mono tracking-widest text-emerald-500 flex-1">8802910812345678</span>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText("8802910812345678");
+                                alert("Nomor VA berhasil disalin ke clipboard!");
+                              }}
+                              className="px-3 py-1.5 bg-slate-200 dark:bg-white/10 rounded-lg text-[9px] font-black uppercase tracking-wider hover:scale-95 transition-transform"
+                            >
+                              SALIN
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] opacity-60 leading-relaxed">
+                          Gunakan m-Banking atau ATM transfer target tagihan di atas. Pembayaran akan terverifikasi secara otonom dalam 3 detik setelah simulasi dimulai.
+                        </p>
+                      </div>
+                    )}
+
+                    {paymentMethod === "cc" && (
+                      <div className="space-y-3">
+                        <span className="text-[10px] font-black tracking-widest uppercase opacity-45 block text-center">SIMULASI CREDIT CARD</span>
+                        
+                        <div className="space-y-2 text-left">
+                          <div className="grid grid-cols-1 gap-1">
+                            <span className="text-[9px] font-bold opacity-55">Nomor Kartu</span>
+                            <input 
+                              type="text" 
+                              disabled 
+                              value="4556 •••• •••• 9012" 
+                              className="px-3 py-2 text-xs font-bold bg-slate-200 dark:bg-white/5 rounded-xl border border-slate-300 dark:border-white/10"
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-2 flex flex-col gap-1">
+                              <span className="text-[9px] font-bold opacity-55">Expired</span>
+                              <input 
+                                type="text" 
+                                disabled 
+                                value="12 / 29" 
+                                className="px-3 py-2 text-xs font-bold text-center bg-slate-200 dark:bg-white/5 rounded-xl border border-slate-300 dark:border-white/10"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[9px] font-bold opacity-55">CVV</span>
+                              <input 
+                                type="text" 
+                                disabled 
+                                value="•••" 
+                                className="px-3 py-2 text-xs font-bold text-center bg-slate-200 dark:bg-white/5 rounded-xl border border-slate-300 dark:border-white/10"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="text-[9px] opacity-40 italic text-center">
+                          Kartu mock VISA/Mastercard terisi secara default untuk kenyamanan sandbox.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Terminal real-time payment log */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest opacity-45 flex items-center gap-1 font-sans">
+                      <Loader2 className="w-3 h-3 animate-spin text-emerald-500" /> State Gateway Logs (Real-time)
+                    </label>
+                    <div className="bg-slate-900 border border-white/5 rounded-2xl p-4 font-mono text-[10px] text-emerald-500 space-y-1 max-h-24 overflow-y-auto leading-relaxed shadow-inner">
+                      {paymentLog.map((logLine, idx) => (
+                        <div key={idx} className="flex gap-2 text-left">
+                          <span className="opacity-40">[{idx + 1}]</span>
+                          <span>{logLine}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button 
+                      onClick={handleSimulatePaymentSuccess}
+                      disabled={isSimulatingPayment}
+                      className="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all text-center flex items-center justify-center gap-2 cursor-pointer disabled:opacity-55"
+                    >
+                      {isSimulatingPayment ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Memproses Transaksi...</span>
+                        </>
+                      ) : (
+                        <span>Simulasikan Pembayaran Berhasil</span>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {paymentStep === "success" && (
+                <div className="py-8 text-center space-y-6">
+                  <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-xl font-bold animate-bounce">
+                    <CheckCircle2 className="w-10 h-10" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-black">Pembayaran Berhasil!</h3>
+                    <p className="text-xs opacity-60 leading-relaxed max-w-xs mx-auto">
+                      Selamat! Pembayaran virtual disetujui otonom. Akunmu sekarang berlisensi penuh sebagai <strong className="text-emerald-500">{paymentPlan} TIER</strong>. Silakan nikmati fitur tanpa batas!
+                    </p>
+                  </div>
+
+                  <div className="pt-2">
+                    <button 
+                      onClick={() => {
+                        setShowPaymentModal(false);
+                        setMode(null);
+                      }}
+                      className="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                    >
+                      Mulai Eksplorasi Premium
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
 }
-

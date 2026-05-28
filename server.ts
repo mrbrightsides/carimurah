@@ -448,6 +448,154 @@ app.patch("/api/history/:uid/:historyId", async (req, res) => {
   }
 });
 
+// --- Midtrans Payment Gateway Integration ---
+app.post("/api/payment/create", async (req, res) => {
+  try {
+    const { plan, uid, email } = req.body;
+    if (!plan || !uid) {
+      return res.status(400).json({ error: "Parameter plan dan uid wajib diisi." });
+    }
+
+    const isProd = process.env.MIDTRANS_IS_PRODUCTION === "true";
+    const serverKey = process.env.MIDTRANS_SERVER_KEY;
+    const clientKey = process.env.MIDTRANS_CLIENT_KEY;
+
+    // Standard local rates in IDR
+    const amount = plan === "PRO" ? 49000 : 1490000;
+    const planAbbr = plan === "PRO" ? "PRO" : "ENT";
+    
+    // Clean alphanumeric UID without special chars for standard orderId pattern
+    const cleanUid = uid.replace(/[^a-zA-Z0-9]/g, "").substring(0, 15);
+    const orderId = `CM-${planAbbr}-${cleanUid}-${Date.now().toString().slice(-6)}`;
+
+    console.log(`[Midtrans Payment] Requesting charge for ${plan}. IsProd: ${isProd}, OrderID: ${orderId}`);
+
+    if (!serverKey) {
+      // Graceful local test simulator mode if credentials are not configured yet
+      console.log("[Midtrans Payment] WARNING: MIDTRANS_SERVER_KEY is undefined. Falling back to Sandbox Mock Simulator.");
+      return res.json({
+        isMock: true,
+        token: `mock-snap-token-${uuidv4().substring(0, 8)}`,
+        redirect_url: `#mock-payment-simulator`,
+        clientKey: clientKey || "mock-client-key"
+      });
+    }
+
+    const midtransUrl = isProd 
+      ? "https://app.midtrans.com/snap/v1/transactions"
+      : "https://app.sandbox.midtrans.com/snap/v1/transactions";
+
+    const authString = Buffer.from(serverKey + ":").toString("base64");
+
+    const payload = {
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: amount
+      },
+      credit_card: {
+        secure: true
+      },
+      customer_details: {
+        first_name: "CariMurah Customer",
+        email: email || "customer@carimurah.ai"
+      },
+      callbacks: {
+        finish: `${req.headers.referer || "https://carimurah.ai/"}?payment=success`
+      }
+    };
+
+    const midtransRes = await fetch(midtransUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${authString}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!midtransRes.ok) {
+      const errorText = await midtransRes.text();
+      throw new Error(`Midtrans API responds error: ${errorText}`);
+    }
+
+    const data = await midtransRes.json();
+    return res.json({
+      isMock: false,
+      token: data.token,
+      redirect_url: data.redirect_url,
+      clientKey
+    });
+
+  } catch (error: any) {
+    console.error("[Midtrans Payment] Error creating Snap transaction:", error);
+    return res.status(500).json({ error: error.message || "Failed to call Midtrans dynamic gateway." });
+  }
+});
+
+app.get("/api/payment/webhook", (req, res) => {
+  return res.json({ status: "ok", message: "Midtrans Webhook HTTP GET endpoint is active." });
+});
+
+app.post("/api/payment/webhook", async (req, res) => {
+  try {
+    const notification = req.body;
+    console.log("[Midtrans Webhook] Received notification:", notification);
+
+    // If it's a test notification / ping from Midtrans without a standard order_id, return 200 OK
+    if (!notification || Object.keys(notification).length === 0) {
+      return res.json({ status: "ok", message: "Empty notification ping received successfully." });
+    }
+
+    const { order_id, transaction_status, fraud_status } = notification;
+
+    if (!order_id) {
+      return res.json({ status: "ok", message: "Notification received but no order_id found. Likely a test ping." });
+    }
+
+    const isSuccess = 
+      (transaction_status === "capture" && fraud_status === "accept") ||
+      transaction_status === "settlement" ||
+      transaction_status === "capture"; // capture accepts directly in sandbox
+
+    if (isSuccess) {
+      // Parse order_id format: CM-{PLAN}-{CLEAN_UID}-{RANDOM}
+      const parts = order_id.split("-");
+      if (parts[0] === "CM") {
+        const planAbbr = parts[1];
+        const cleanUidPart = parts[2];
+        const plan = planAbbr === "PRO" ? "PRO" : "ENTERPRISE";
+
+        // Query User document based on starting-regex match for UID
+        const { db } = await connectToDatabase();
+        
+        // Find user where uid starts with cleanUidPart
+        const matchRegex = new RegExp(`^${cleanUidPart}`, "i");
+        const userDoc = await db.collection("users").findOne({ uid: { $regex: matchRegex } });
+
+        if (userDoc) {
+          const durationMs = plan === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
+          const expiresAt = new Date(Date.now() + durationMs).toISOString();
+          const subs = { tier: plan, expiresAt };
+
+          await db.collection("users").updateOne(
+            { uid: userDoc.uid },
+            { $set: { subscription: subs, updatedAt: new Date().toISOString() } }
+          );
+          console.log(`[Midtrans Webhook] Successfully upgraded Firebase UID ${userDoc.uid} to ${plan}`);
+        } else {
+          console.warn(`[Midtrans Webhook] No matching user document found in MongoDB starting with: ${cleanUidPart}`);
+        }
+      }
+    }
+
+    return res.json({ received: true });
+  } catch (error: any) {
+    console.error("[Midtrans Webhook] Error processing handler:", error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // Initialize Gemini
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
