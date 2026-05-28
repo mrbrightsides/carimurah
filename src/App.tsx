@@ -56,6 +56,7 @@ import {
   FileSearch,
   MessageSquare,
   CreditCard,
+  Plus,
   QrCode
 } from "lucide-react";
 import Markdown from "react-markdown";
@@ -313,6 +314,13 @@ export default function App() {
   const [dailyScansCount, setDailyScansCount] = useState<number>(0);
   const [showQuotaLimitModal, setShowQuotaLimitModal] = useState(false);
 
+  // Manual Quick Add States
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddBrand, setQuickAddBrand] = useState("");
+  const [quickAddPrice, setQuickAddPrice] = useState("");
+  const [quickAddSaving, setQuickAddSaving] = useState("");
+
   // Interactive Payment Simulator States
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentPlan, setPaymentPlan] = useState<"PRO" | "ENTERPRISE" | null>(null);
@@ -349,6 +357,80 @@ export default function App() {
       window.history.replaceState({}, document.title, newUrl);
     }
   }, []);
+
+  const handleQuickAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddName || !quickAddPrice) return;
+
+    const parsedPrice = parseFloat(quickAddPrice) || 0;
+    const parsedSaving = parseFloat(quickAddSaving) || 0;
+    
+    const batchResult: BatchAnalysisResult = {
+      items: [
+        {
+          productName: quickAddName,
+          brand: quickAddBrand || "Manual Entry",
+          currentPrice: parsedPrice,
+          recommendedPrice: Math.max(parsedPrice - parsedSaving, 0),
+          platform: "Manual Entry",
+          url: "",
+          saving: parsedSaving,
+          rating: 5,
+          deliveryDays: "0",
+          stockStatus: "Ready",
+          features: ["Manual Quick Add Product"],
+          isWinner: true,
+        }
+      ],
+      totalCurrentSpent: parsedPrice,
+      totalRecommendedSpent: Math.max(parsedPrice - parsedSaving, 0),
+      totalPotentialSavings: parsedSaving,
+      summaryVoice: `Berhasil mencatat ${quickAddName} secara manual ke dalam riwayat belanja Anda.`
+    };
+
+    try {
+      if (user) {
+        await saveHistory(user.uid, {
+          date: new Date().toISOString(),
+          totalSaved: batchResult.totalPotentialSavings,
+          itemsCount: batchResult.items.length,
+          type: isB2B ? "B2B" : "B2C",
+          result: batchResult
+        });
+        await loadHistoryFromDB(user.uid);
+      } else {
+        const newItem: HistoryItem = {
+          id: Math.random().toString(36).substring(2, 11),
+          date: new Date().toLocaleDateString("id-ID"),
+          totalSaved: batchResult.totalPotentialSavings,
+          itemsCount: batchResult.items.length,
+          type: isB2B ? "B2B" : "B2C",
+          result: batchResult
+        };
+        const updated = [newItem, ...history].slice(0, 10);
+        setHistory(updated);
+        localStorage.setItem("carimurah_history", JSON.stringify(updated));
+      }
+
+      // Reset fields
+      setQuickAddName("");
+      setQuickAddBrand("");
+      setQuickAddPrice("");
+      setQuickAddSaving("");
+      setShowQuickAddModal(false);
+
+      if (typeof pendo !== "undefined") {
+        pendo.track("manual_quick_add_success", {
+          product_name: quickAddName,
+          brand: quickAddBrand,
+          price: parsedPrice,
+          saving: parsedSaving,
+        });
+      }
+    } catch (err) {
+      console.error("Gagal menyimpan cepat riwayat:", err);
+    }
+  };
 
   const [midtransLoading, setMidtransLoading] = useState(false);
   const [midtransData, setMidtransData] = useState<{ token?: string; redirect_url?: string; isMock?: boolean } | null>(null);
@@ -1494,6 +1576,12 @@ export default function App() {
                           </button>
                         )}
                         <button 
+                          onClick={() => setShowQuickAddModal(true)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${isB2B ? "bg-indigo-500 hover:bg-indigo-600 text-white shadow-indigo-500/10" : "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/10"} shadow-lg active:scale-95`}
+                        >
+                           <Plus className="w-3 h-3" /> Quick Add
+                        </button>
+                        <button 
                           onClick={exportToCSV}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${isB2B ? "bg-white/5 text-white/60 hover:bg-white/10" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
                         >
@@ -2203,9 +2291,84 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none flex items-center justify-center">
-                        <div className="w-full h-64 border-2 border-emerald-500/50 rounded-3xl relative">
-                           <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-emerald-500 rounded-tl-xl" />
-                           <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-emerald-500 rounded-br-xl" />
+                        <div className={`w-full h-72 border border-dashed rounded-3xl relative overflow-hidden flex items-center justify-center ${isB2B ? "border-indigo-500/50" : "border-emerald-500/50"}`}>
+                           <style dangerouslySetInnerHTML={{__html: `
+                             @keyframes scanSweep {
+                               0% { top: 0%; opacity: 0.1; }
+                               10% { opacity: 1; }
+                               90% { opacity: 1; }
+                               100% { top: 100%; opacity: 0.1; }
+                             }
+                             @keyframes trackerPulse {
+                               0%, 100% { transform: scale(1); opacity: 0.8; }
+                               50% { transform: scale(1.08); opacity: 1; }
+                             }
+                             @keyframes driftPos1 {
+                               0%, 100% { transform: translate(0px, 0px); }
+                               50% { transform: translate(5px, -6px); }
+                             }
+                             @keyframes driftPos2 {
+                               0%, 100% { transform: translate(0px, 0px); }
+                               50% { transform: translate(-5px, 6px); }
+                             }
+                           `}} />
+
+                           {/* Dynamic 3D Framing Corners */}
+                           <div className={`absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 rounded-tl-xl ${isB2B ? "border-indigo-500" : "border-emerald-500"}`} />
+                           <div className={`absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 rounded-tr-xl ${isB2B ? "border-indigo-500" : "border-emerald-500"}`} />
+                           <div className={`absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 rounded-bl-xl ${isB2B ? "border-indigo-500" : "border-emerald-500"}`} />
+                           <div className={`absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 rounded-br-xl ${isB2B ? "border-indigo-500" : "border-emerald-500"}`} />
+
+                           {/* Moving Laser Sweep Ribbon */}
+                           <div 
+                             className={`absolute left-0 right-0 h-[3px] pointer-events-none rounded-full ${isB2B ? "bg-gradient-to-r from-transparent via-indigo-400 to-transparent shadow-[0_0_15px_rgba(99,102,241,0.8)]" : "bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_rgba(16,185,129,0.8)]"}`}
+                             style={{
+                               animation: "scanSweep 3.5s infinite linear",
+                             }}
+                           />
+
+                           {/* HUD Active Scanner Information Tag */}
+                           <div className={`absolute top-4 left-4 z-10 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 ${isB2B ? "bg-indigo-500/20 text-indigo-400" : "bg-emerald-500/20 text-emerald-400"}`}>
+                             <Loader2 className="w-3 h-3 animate-spin" />
+                             <span>Pindai Real-time Aktif</span>
+                           </div>
+
+                           {/* Real-time Simulated Product Recognition Bounding-box #1 */}
+                           <div 
+                             className={`absolute px-2.5 py-1.5 border rounded-lg flex flex-col gap-0.5 pointer-events-none ${isB2B ? "border-indigo-500/50 bg-indigo-950/40 text-indigo-200" : "border-emerald-500/50 bg-emerald-950/40 text-emerald-200"}`}
+                             style={{
+                               top: "22%",
+                               left: "15%",
+                               animation: "trackerPulse 2.8s infinite ease-in-out, driftPos1 4s infinite ease-in-out"
+                             }}
+                           >
+                             <div className="flex items-center gap-1">
+                               <div className={`w-1.5 h-1.5 rounded-full animate-ping ${isB2B ? "bg-indigo-400" : "bg-emerald-400"}`} />
+                               <span className="text-[9px] font-black tracking-wider uppercase font-mono">{isB2B ? "Beras 50kg" : "Beras Premium"}</span>
+                             </div>
+                             <span className="text-[10px] font-black font-mono leading-none">{isB2B ? "Rp550.000" : "Rp71.500"}</span>
+                           </div>
+
+                           {/* Real-time Simulated Product Recognition Bounding-box #2 */}
+                           <div 
+                             className={`absolute px-2.5 py-1.5 border rounded-lg flex flex-col gap-0.5 pointer-events-none ${isB2B ? "border-indigo-500/50 bg-indigo-950/40 text-indigo-200" : "border-emerald-500/50 bg-emerald-950/40 text-emerald-200"}`}
+                             style={{
+                               bottom: "22%",
+                               right: "12%",
+                               animation: "trackerPulse 3.5s infinite ease-in-out, driftPos2 5s infinite ease-in-out"
+                             }}
+                           >
+                             <div className="flex items-center gap-1">
+                               <div className={`w-1.5 h-1.5 rounded-full animate-ping ${isB2B ? "bg-indigo-400" : "bg-emerald-400"}`} />
+                               <span className="text-[9px] font-black tracking-wider uppercase font-mono">{isB2B ? "Minyak Karton" : "Minyak Sunco 2L"}</span>
+                             </div>
+                             <span className="text-[10px] font-black font-mono leading-none">{isB2B ? "Rp184.000" : "Rp38.200"}</span>
+                           </div>
+                           
+                           {/* Decorative lock graphic in center */}
+                           <div className="w-10 h-10 border border-dashed border-white/20 rounded-full flex items-center justify-center opacity-40">
+                             <div className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                           </div>
                         </div>
                     </div>
                   )}
@@ -3473,6 +3636,111 @@ export default function App() {
                   {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Ya, Hapus"}
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* MANUAL QUICK ADD MODAL */}
+        {showQuickAddModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 relative overflow-hidden`}
+            >
+              {/* Soft background glow */}
+              <div className={`absolute -top-10 -right-10 w-40 h-40 rounded-full blur-3xl pointer-events-none ${isB2B ? "bg-indigo-500/10" : "bg-emerald-500/10"}`} />
+              
+              <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-white/5">
+                <div className="flex items-center gap-2">
+                  <div className={`p-2.5 rounded-2xl ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-500"}`}>
+                    <Plus className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-lg font-black tracking-tight">Manual Quick Add</h3>
+                    <p className="text-[10px] opacity-50 font-medium">Catat produk tanpa analisis AI penuh</p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowQuickAddModal(false)}
+                  className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleQuickAddSubmit} className="space-y-4">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase tracking-widest opacity-60">Nama Produk *</label>
+                  <input 
+                    type="text"
+                    required
+                    value={quickAddName}
+                    onChange={(e) => setQuickAddName(e.target.value)}
+                    placeholder="Contoh: Susu Indomilk Full Cream 1L"
+                    className={`w-full px-5 py-4 rounded-2xl border transition-all text-xs outline-none ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-200 focus:border-emerald-500 text-slate-900"}`}
+                  />
+                </div>
+
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase tracking-widest opacity-60">Merek / Brand / Supplier</label>
+                  <input 
+                    type="text"
+                    value={quickAddBrand}
+                    onChange={(e) => setQuickAddBrand(e.target.value)}
+                    placeholder="Contoh: Indofood / PT Distribusi Jaya"
+                    className={`w-full px-5 py-4 rounded-2xl border transition-all text-xs outline-none ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-200 focus:border-emerald-500 text-slate-900"}`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] font-black uppercase tracking-widest opacity-60">Harga (Rp) *</label>
+                    <input 
+                      type="number"
+                      required
+                      value={quickAddPrice}
+                      onChange={(e) => setQuickAddPrice(e.target.value)}
+                      placeholder="Contoh: 18500"
+                      className={`w-full px-5 py-4 rounded-2xl border transition-all text-xs outline-none ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-200 focus:border-emerald-500 text-slate-900"}`}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] font-black uppercase tracking-widest opacity-60">Hemat (Rp)</label>
+                    <input 
+                      type="number"
+                      value={quickAddSaving}
+                      onChange={(e) => setQuickAddSaving(e.target.value)}
+                      placeholder="Contoh: 1500"
+                      className={`w-full px-5 py-4 rounded-2xl border transition-all text-xs outline-none ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-200 focus:border-emerald-500 text-slate-900"}`}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 grid grid-cols-2 gap-4">
+                  <button 
+                    type="button"
+                    onClick={() => setShowQuickAddModal(false)}
+                    className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${isB2B ? "bg-white/5 hover:bg-white/10 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-900"}`}
+                  >
+                    Batal
+                  </button>
+                  <button 
+                    type="submit"
+                    className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-[#0c0d0e] transition-all shadow-xl ${isB2B ? "bg-indigo-400 hover:bg-indigo-500 shadow-indigo-500/20" : "bg-emerald-400 hover:bg-emerald-500 shadow-emerald-500/20"}`}
+                  >
+                    Simpan Riwayat
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}
