@@ -1,77 +1,72 @@
-# 🚀 CariMurah.ai: SaaS Blueprint v2.2 (The Interactive Smart Shopping Suite)
+# 🚀 CariMurah.ai: Smart Shopping & B2B Procurement Suite
 
-CariMurah.ai is a high-sophistication, multi-agent AI system designed to disrupt the e-commerce and wholesale landscape in Indonesia. From retail hunters (B2C Smart Savers) to enterprise procurement squads (B2B Procurement), we turn raw visual, voice, and text data into autonomous profit engines.
+CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt the e-commerce and wholesale landscape in Indonesia. From retail hunters (B2C Smart Savers) to enterprise procurement squads (B2B Procurement Pro), we turn raw visual, voice, and text data into autonomous profit engines.
+
+[![Live App](https://img.shields.io/badge/Live-carimurah.elpeef.com-emerald.svg?style=flat-square)](https://carimurah.elpeef.com)
+[![Capacitor Native](https://img.shields.io/badge/Capacitor-Android-blue.svg?style=flat-square)](./SETUP.md)
+[![License](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](./LICENSE)
+
+---
+
+## 🌍 Quick Access Links & Live Deployment
+
+*   **Live Application**: [https://carimurah.elpeef.com](https://carimurah.elpeef.com)
+*   **Source Code Repository**: [https://github.com/mrbrightsides/carimurah](https://github.com/mrbrightsides/carimurah)
+*   **Official Support Email**: [support@elpeef.com](mailto:support@elpeef.com)
 
 ---
 
 ## 💎 Monetization Strategy & Tiering (v2.2)
 
 ### 🥉 Free Tier (B2C Massal)
-*   **Target**: General consumers.
-*   **Features**: Scan AI (Foto/Voice), instant retail comparison, and secure affiliate routing.
-*   **Revenue Source**: 100% automated Affiliate Commissions (Shopee, Tokopedia, etc.).
+*   **Target**: General Indonesian consumers.
+*   **Features**: Scan AI (Foto/Voice), instant retail price comparison, and secure affiliate routing.
+*   **Revenue Source**: 100% automated Affiliate Commissions (Shopee, Tokopedia, Bukalapak).
 
 ### 🥈 Pro Tier: Smart Saver (Rp49.000 / mo.)
-*   **Target**: Resellers & Heavy Shoppers.
+*   **Target**: Resellers, drop-shippers, & heavy personal shoppers.
 *   **Features**: 
     *   **Predictive AI Forecasting**: Analyzes historical cycles (e.g., Payday, 6.6, 12.12) to suggest "Wait" or "Buy".
-    *   **Persistent Smart Watchlist**: 24/7 Agent Monitoring that blasts alerts when prices hit target drops.
+    *   **Persistent Smart Watchlist**: 24/7 Agent Monitoring that blasts alerts when price thresholds drop.
     *   **Interactive Price Cycle Simulator**: Simulate Payday, Double Date, or Midnight Flash Sale discount drops with dynamic Recharts trendlines.
-    *   **Deep-Link Checkout**: Autonomous cart filling on marketplace destination.
+    *   **Deep-Link Checkout**: Autonomous cart filling on destination marketplaces.
 
 ### 🥇 Enterprise Tier: Procurement Pro (Rp1.490.000 / mo.)
-*   **Target**: UMKM & Corporate Procurement.
+*   **Target**: UMKM & Corporate Procurement managers.
 *   **Features**:
-    *   **Autonomous RFQ Workflow**: Generates official Request for Quotation documents for bulk vendor inquiries.
-    *   **AI Bargain & Negotiation Script Helper**: Generate highly tailored negotiation chats based on posture (Collaborative, Aggressive, Tactical) to send directly to WhatsApp suppliers or marketplace sellers.
-    *   **Landed Cost & Logistics**: Calculates true "Apple-to-Apple" costs including cargo bulk shipping & taxes.
-    *   **Historical OCR Audit**: Scan piles of old invoices to identify multi-million rupiah "cash leaks" and savings.
-    *   **Collaborative Approval**: Shared dashboard for managers to approve procurement drafts.
+    *   **Autonomous RFQ Workflow**: Generates print/PDF-ready official Request for Quotation documents for bulk vendor distribution.
+    *   **AI Bargain & Negotiation Script Helper**: Generate highly tailored negotiation scripts based on posture (Collaborative, Aggressive, Tactical) to connect with WhatsApp suppliers.
+    *   **Landed Cost & Logistics**: Calculates true "Apple-to-Apple" costs including bulk cargo shipping, processing, and handling fees.
+    *   **Historical OCR Audit**: Scan piles of old paper invoices to identify multi-million rupiah "cash leaks" and better historical pricing options.
 
 ---
 
-## 🛠️ v2.2 Core Ecosystem Capabilities
+## 🛠️ Unified Core Capabilities
 
-### 🧠 Predictive AI Cycle Engine & Simulator
-Our agents don't just read the price today—they analyze historical data cycles. 
-*   **Simulate Promos**: Instantly simulate price action during Payday (8% off), Double Date (15% off), or Midnight Flash Sales (20% off) with interactive charting.
-*   **Actionable Advice**: Dynamically advises "Buy Now" or "Wait for Promo" depending on simulated conditions.
-
-### 💬 AI Bargain & Negotiation Assistant
-Negotiation is the heart of procurement in Indonesia. 
-*   **Postures**: Choose from *Kolaboratif* (long-term contract routing), *Agresif* (instant buy volume pressure), or *Taktis* (negotiating free logistics cargo benefits).
-*   **One-Click Action**: Generates copy-ready drafts in elegant Indonesian, mentioning exact product brands, targets, and supplier benchmarks.
-
-### 🧭 Frictionless Onboarding & Seamless Auth Fallbacks
-*   **Onboarding Modal**: Visually pairs key capabilities (AI Scan, Real-time Compare, B2B Modes) for first-time visitors with local persistence.
-*   **Flexible Access**: Clean distinctions between Google-secured MongoDB Cloud profiles and robust `localStorage` anonymous guest profiles.
-
-### ⏳ Interactive Agent Progress Logs
-*   No more guessing. While the AI searches the internet, users view live-updated system tasks (checking databases, contact logs, scanning Tokopedia/Shopee channels, cargo audits) coupled with percentage progress.
-
-### 📋 Enterprise RFQ & Logistics
-Specially tuned for Indonesian supply chains:
-*   **Landed Cost**: Automates freight calculations for cargo-scale purchases.
-*   **RFQ Automation**: Converts a simple grocery list or voice request into a professional procurement document ready for vendors.
-
-### 🔍 Historical OCR Audit
-Businesses can upload bulk photos of old physical receipts. The AI performs an automated audit:
-*"You usually buy Ingredient A at Supplier X, but Supplier Y was 20% cheaper last month. Move 100% of volume to Supplier Y next month for Rp5.200.000 annual saving."*
-
-### 🔄 In-App Autonomous Agent with MCP
-Our integrated conversational agent uses **Model Context Protocol (MCP)** to interact directly with MongoDB. It can dynamically query your procurement history, adjust your B2B preferences, and perform pricing audits.
+*   **Predictive AI Cycle Engine**: Simulates discount patterns during Payday (8% off), Double Date (15% off), or Midnight Flash Sales (20% off) dynamically.
+*   **AI Bargain Generator**: Creates customized negotiation transcripts in professional, friendly, or agressive Indonesian tones for direct Wholesaler WhatsApp chats.
+*   **Autonomous Progress Tracker**: Gives physical progress and steps (e.g., *Auditing Shopee indexes*, *Analyzing Cargo freight rates*) for AI scans.
+*   **Frictionless LocalStorage Cache**: Operates instantly as an anonymous offline guest, syncing to cloud database profiles upon simple Google Authentication.
 
 ---
 
-## 🏗️ Technical Stack (Autonomous Multi-Agent)
-*   **Intelligence**: Google Gemini 3.5 Flash (Agentic Reasoning & Multi-Modal Vision via the `@google/genai` modern SDK)
-*   **Agent Protocol**: **Model Context Protocol (MCP)** inside Node.js for bridging database operations with AI tools.
-*   **Frontend**: React 18 / Vite / Tailwind CSS / Motion (Fluid Transitions)
-*   **Backend**: Node.js / Express (Server-Side Proxy for API Security & Database Integration)
-*   **Database**: **MongoDB Atlas** (Highly secure NoSQL database tracking user profiles, preferences, and analysis history)
-*   **Authentication**: **Firebase Authentication** (Google Sign-In integration for secure cloud profiles with robust LocalStorage fallbacks)
-*   **Voice**: High-fidelity Web Speech API Integration
+## 📂 Sub-Documentation Hub
+
+To make onboarding and contribution seamless, please review our specialized technical directories:
+
+*   **[ARCHITECTURE.md](./ARCHITECTURE.md)**: Explore the System Topology diagrams, dynamic sequence flows, and database entity relationships rendered with standard Mermaid blocks.
+*   **[SETUP.md](./SETUP.md)**: Step-by-step developer guide on local compilation, setup of `.env` assets, and building your signed mobile `.aab` bundles inside Android Studio with Capacitor.
+*   **[THIRD_PARTY_APIs.md](./THIRD_PARTY_APIs.md)**: Configuration details for Google Gemini 3.5 (@google/genai SDK), MongoDB connection URIs, and Firebase authentications.
+*   **[CONTRIBUTING.md](./CONTRIBUTING.md)**: Forking guide, repository constraints, and community branching strategies.
 
 ---
+
+## 🤝 Community & Direct Support
+
+Stay connected and communicate with developers and directors:
+*   **Lead Maintainer**: Akhmad Khudri
+*   **Personal Email**: [khudri@binadarma.ac.id](mailto:khudri@binadarma.ac.id)
+*   **Telegram Support**: [@khudriakhmad](https://t.me/khudriakhmad)
+*   **Discord Server**: [CariMurah Channels](https://discord.com/channels/@khudri_61362)
 
 *Crafted for the future of Indonesian supply chain excellence and digital economy acceleration.*
