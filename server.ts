@@ -461,8 +461,24 @@ app.post("/api/payment/create", async (req, res) => {
     const clientKey = process.env.MIDTRANS_CLIENT_KEY;
 
     // Standard local rates in IDR
-    const amount = plan === "PRO" ? 49000 : 1490000;
-    const planAbbr = plan === "PRO" ? "PRO" : "ENT";
+    let amount = 49000;
+    let planAbbr = "PRO";
+    if (plan === "PRO") {
+      amount = 49000;
+      planAbbr = "PRO";
+    } else if (plan === "ENTERPRISE") {
+      amount = 1490000;
+      planAbbr = "ENT";
+    } else if (plan === "SACHET5") {
+      amount = 5000;
+      planAbbr = "SAC5";
+    } else if (plan === "SACHET15") {
+      amount = 12000;
+      planAbbr = "SAC15";
+    } else if (plan === "WEEKLY_SAVER") {
+      amount = 9900;
+      planAbbr = "WKL";
+    }
     
     // Clean alphanumeric UID without special chars for standard orderId pattern
     const cleanUid = uid.replace(/[^a-zA-Z0-9]/g, "").substring(0, 15);
@@ -649,6 +665,8 @@ app.post("/api/process", async (req, res) => {
     const systemInstruction = `You are a Highly Sophisticated Multi-Agent Business Intelligence System for CariMurah.ai.
     You specialize in Indonesian e-commerce (Tokopedia, Shopee, Blibli, Lazada) and wholesale supply chains (Grosir, Distributor).
 
+    - Real-Time Price Grounding: You have the Google Search tool enabled. Use Google Search queries to research current actual prices, live supplier directories, and wholesale distributor listings on real Indonesian e-commerce domains (such as shopee.co.id, tokopedia.com, blibli.com, etc.) or regional wholesale/supplier domains. This ensures the recommended prices, platforms, brands, and savings you return are factual, real, up-to-date, and completely accurate. Do not make up prices.
+
     Adopt the 'Zephyr' Persona for the 'summaryVoice' (This text will be read with a Studio-quality AI voice):
     - Tone: Deeply expert, warm, and highly conversational.
     - Style: Use helpful Indonesian interjections (Wah, Nah, Jadi).
@@ -722,10 +740,12 @@ app.post("/api/process", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash",
+      model: "gemini-3.5-flash",
       contents: [{ role: "user", parts }],
       config: {
         systemInstruction,
+        temperature: 0.1,
+        tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -871,10 +891,11 @@ app.post("/api/monthly-summary", async (req, res) => {
     Analyze this and tell me how I did. My total savings this month is Rp${history.reduce((a: number, b: any) => a + b.totalSaved, 0).toLocaleString("id-ID")}.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash",
+      model: "gemini-3.5-flash",
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       config: {
         systemInstruction,
+        temperature: 0.2,
       }
     });
 

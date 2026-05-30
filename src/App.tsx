@@ -1,7 +1,7 @@
 declare var pendo: { trackAgent: (eventType: string, metadata: object) => void; [key: string]: any };
 
 import { motion, AnimatePresence } from "motion/react";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { 
   ResponsiveContainer,
   BarChart,
@@ -57,7 +57,12 @@ import {
   MessageSquare,
   CreditCard,
   Plus,
-  QrCode
+  QrCode,
+  Lock,
+  Send,
+  Mail,
+  AlertTriangle,
+  Info
 } from "lucide-react";
 import Markdown from "react-markdown";
 import type { InputMode, AnalysisState, BatchAnalysisResult, HistoryItem, UserProfile, ItemAnalysis, MarketOption } from "./types";
@@ -272,14 +277,88 @@ const DEFAULT_GUEST_PROFILE: UserProfile = {
   }
 };
 
+const getPlanName = (p: string | null) => {
+  if (p === "PRO") return "PRO TIER (Smart Saver)";
+  if (p === "ENTERPRISE") return "ENTERPRISE TIER (Procurement)";
+  if (p === "SACHET5") return "SACHET LITE (5 Scans)";
+  if (p === "SACHET15") return "SACHET REGULAR (15 Scans)";
+  if (p === "WEEKLY_SAVER") return "WEEKLY SAVER PASS (100 Scans)";
+  return "";
+};
+
+const getPlanPrice = (p: string | null) => {
+  if (p === "PRO") return "Rp49.000";
+  if (p === "ENTERPRISE") return "Rp1.490.000";
+  if (p === "SACHET5") return "Rp5.000";
+  if (p === "SACHET15") return "Rp12.000";
+  if (p === "WEEKLY_SAVER") return "Rp9.900";
+  return "";
+};
+
 export default function App() {
+  // Toast notifications state
+  const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info" | "warning"; message: string }[]>([]);
+
+  const triggerToast = useCallback((message: string, type: "success" | "error" | "info" | "warning" = "success") => {
+    const id = Date.now().toString() + Math.random().toString();
+    setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  }, []);
+
   const [mode, setMode] = useState<InputMode | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisState | null>(null);
   const [loading, setLoading] = useState(false);
   const [isB2B, setIsB2B] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(DEFAULT_GUEST_PROFILE);
+  const [profileState, setProfileState] = useState<UserProfile | null>(DEFAULT_GUEST_PROFILE);
+  const profile = useMemo(() => {
+    if (!profileState) return null;
+    const isVip = 
+      user?.email === "khudri@binadarma.ac.id" || 
+      profileState.email === "khudri@binadarma.ac.id" || 
+      localStorage.getItem("carimurah_sandbox_user")?.includes("khudri@binadarma.ac.id");
+    if (isVip) {
+      return {
+        ...profileState,
+        displayName: profileState.displayName || "Romi Khudri (VIP Access)",
+        subscription: {
+          ...profileState.subscription,
+          tier: "ENTERPRISE" as const
+        }
+      };
+    }
+    return profileState;
+  }, [profileState, user?.email]);
+
+  const setProfile = useCallback((val: UserProfile | null | ((prev: UserProfile | null) => UserProfile | null)) => {
+    setProfileState((prev) => {
+      let resolved = typeof val === "function" ? val(prev) : val;
+      if (resolved) {
+        const isVip = 
+          resolved.email === "khudri@binadarma.ac.id" || 
+          user?.email === "khudri@binadarma.ac.id" || 
+          localStorage.getItem("carimurah_sandbox_user")?.includes("khudri@binadarma.ac.id");
+        if (isVip) {
+          resolved = {
+            ...resolved,
+            displayName: "Romi Khudri (VIP Access)",
+            subscription: {
+              ...resolved.subscription,
+              tier: "ENTERPRISE"
+            }
+          };
+        }
+        // Disparut toast jika preferensi terbukti diperbarui
+        if (prev && JSON.stringify(prev.preferences) !== JSON.stringify(resolved.preferences)) {
+          triggerToast("Preferensi berhasil diperbarui!", "success");
+        }
+      }
+      return resolved;
+    });
+  }, [user?.email, triggerToast]);
   const [watchlist, setWatchlist] = useState<ItemAnalysis[]>([]);
   const [manualText, setManualText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -313,6 +392,31 @@ export default function App() {
   // Daily quota indicators (3 scans per day)
   const [dailyScansCount, setDailyScansCount] = useState<number>(0);
   const [showQuotaLimitModal, setShowQuotaLimitModal] = useState(false);
+  const [extraCredits, setExtraCredits] = useState<number>(() => {
+    return parseInt(localStorage.getItem("carimurah_extra_credits") || "0", 10);
+  });
+  
+  // Affiliate & Sponsored Action Modal States
+  const [showAffiliateModal, setShowAffiliateModal] = useState(false);
+  
+  // Global trigger access for console or debug
+  useEffect(() => {
+    (window as any).triggerToast = triggerToast;
+  }, [triggerToast]);
+
+  // Feedback states
+  const [feedbackSubject, setFeedbackSubject] = useState("");
+  const [feedbackBody, setFeedbackBody] = useState("");
+  const [isSendingFeedback, setIsSendingFeedback] = useState(false);
+
+  // QR scanner states
+  const [qrScanningState, setQrScanningState] = useState<"idle" | "scanning" | "matched">("idle");
+  const [qrMatchedData, setQrMatchedData] = useState<any>(null);
+  const [selectedAffiliateItem, setSelectedAffiliateItem] = useState<any>(null);
+  const [affiliateRedirecting, setAffiliateRedirecting] = useState(false);
+  const [sponsoredLoading, setSponsoredLoading] = useState(false);
+  const [sponsoredStep, setSponsoredStep] = useState<"none" | "watching" | "completed">("none");
+  const [sponsoredAwardedAmount, setSponsoredAwardedAmount] = useState<number>(0);
 
   // Manual Quick Add States
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
@@ -323,7 +427,7 @@ export default function App() {
 
   // Interactive Payment Simulator States
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentPlan, setPaymentPlan] = useState<"PRO" | "ENTERPRISE" | null>(null);
+  const [paymentPlan, setPaymentPlan] = useState<"PRO" | "ENTERPRISE" | "SACHET5" | "SACHET15" | "WEEKLY_SAVER" | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"qris" | "va" | "cc">("qris");
   const [paymentStep, setPaymentStep] = useState<"method" | "billing" | "success">("method");
   const [isSimulatingPayment, setIsSimulatingPayment] = useState(false);
@@ -357,6 +461,10 @@ export default function App() {
       window.history.replaceState({}, document.title, newUrl);
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("carimurah_extra_credits", extraCredits.toString());
+  }, [extraCredits]);
 
   const handleQuickAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -435,7 +543,7 @@ export default function App() {
   const [midtransLoading, setMidtransLoading] = useState(false);
   const [midtransData, setMidtransData] = useState<{ token?: string; redirect_url?: string; isMock?: boolean } | null>(null);
 
-  const initiateMidtransPayment = async (plan: "PRO" | "ENTERPRISE") => {
+  const initiateMidtransPayment = async (plan: "PRO" | "ENTERPRISE" | "SACHET5" | "SACHET15" | "WEEKLY_SAVER") => {
     setPaymentPlan(plan);
     setPaymentMethod("qris");
     setPaymentStep("method");
@@ -514,31 +622,43 @@ export default function App() {
 
     setTimeout(() => {
       const tierChosen = paymentPlan || "PRO";
-      const durationMs = tierChosen === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
-      const expiresAt = new Date(Date.now() + durationMs).toISOString();
-      const subs = { tier: tierChosen, expiresAt };
-
-      setProfile(prev => {
-        if (!prev) return prev;
-        return { ...prev, subscription: subs };
-      });
-
-      if (user) {
-        updateProfile(user.uid, { subscription: subs });
+      
+      if (tierChosen === "SACHET5") {
+        setExtraCredits(prev => prev + 5);
+        setPaymentLog(prev => [...prev, "Selesai! 5 Kredit Scan telah didepositkan ke akun Anda!"]);
+      } else if (tierChosen === "SACHET15") {
+        setExtraCredits(prev => prev + 15);
+        setPaymentLog(prev => [...prev, "Selesai! 15 Kredit Scan telah didepositkan ke akun Anda!"]);
+      } else if (tierChosen === "WEEKLY_SAVER") {
+        setExtraCredits(prev => prev + 100);
+        setPaymentLog(prev => [...prev, "Selesai! Weekly Saver Pass Aktif, 100 Kredit Scan telah didepositkan ke akun Anda!"]);
       } else {
-        const localProf = localStorage.getItem("carimurah_guest_profile");
-        let parsed = { preferences: {} };
-        if (localProf) {
-          try { parsed = JSON.parse(localProf); } catch (e) {}
+        const durationMs = tierChosen === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
+        const expiresAt = new Date(Date.now() + durationMs).toISOString();
+        const subs = { tier: tierChosen, expiresAt };
+
+        setProfile(prev => {
+          if (!prev) return prev;
+          return { ...prev, subscription: subs };
+        });
+
+        if (user) {
+          updateProfile(user.uid, { subscription: subs });
+        } else {
+          const localProf = localStorage.getItem("carimurah_guest_profile");
+          let parsed = { preferences: {} };
+          if (localProf) {
+            try { parsed = JSON.parse(localProf); } catch (e) {}
+          }
+          localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...parsed, subscription: subs }));
         }
-        localStorage.setItem("carimurah_guest_profile", JSON.stringify({ ...parsed, subscription: subs }));
       }
 
       // Track subscription upgraded in Pendo
       if (typeof pendo !== "undefined") {
         pendo.track("subscription_upgraded", {
           tier: tierChosen,
-          price: tierChosen === "PRO" ? 49000 : 1490000,
+          price: tierChosen === "PRO" ? 49000 : tierChosen === "ENTERPRISE" ? 1490000 : tierChosen === "SACHET5" ? 5000 : tierChosen === "SACHET15" ? 12000 : 9900,
           upgrade_source: "payment_simulator_interactive"
         });
       }
@@ -547,6 +667,28 @@ export default function App() {
       setIsSimulatingPayment(false);
       setPaymentStep("success");
     }, 2000);
+  };
+
+  const handleAffiliateRedirect = () => {
+    setAffiliateRedirecting(true);
+    setTimeout(() => {
+      setAffiliateRedirecting(false);
+      setShowAffiliateModal(false);
+      setExtraCredits(prev => prev + 1);
+      if (selectedAffiliateItem?.opt?.url) {
+        window.open(selectedAffiliateItem.opt.url, "_blank");
+      }
+    }, 2200);
+  };
+
+  const handleCompleteSponsored = (missionId: string) => {
+    setSponsoredLoading(true);
+    setSponsoredStep("watching");
+    setTimeout(() => {
+      setSponsoredLoading(false);
+      setSponsoredStep("completed");
+      setExtraCredits(prev => prev + 1);
+    }, 2500);
   };
   
   // Sandbox login states for preview-safe authentication
@@ -637,8 +779,10 @@ export default function App() {
     // Check daily quota for FREE tier
     const isFree = !profile?.subscription?.tier || profile?.subscription?.tier === "FREE";
     if (isFree && dailyScansCount >= 3) {
-      setShowQuotaLimitModal(true);
-      return;
+      if (extraCredits <= 0) {
+        setShowQuotaLimitModal(true);
+        return;
+      }
     }
 
     const textToSend = presetText || chatInput;
@@ -687,12 +831,16 @@ export default function App() {
 
       setChatMessages(prev => [...prev, assistantMsg]);
 
-      // Count against quota for FREE users
-      if (isFree) {
-        const newCount = dailyScansCount + 1;
-        setDailyScansCount(newCount);
-        localStorage.setItem("carimurah_daily_scans", newCount.toString());
-      }
+       // Count against quota for FREE users
+       if (isFree) {
+         if (dailyScansCount >= 3) {
+           setExtraCredits(prev => Math.max(0, prev - 1));
+         } else {
+           const newCount = dailyScansCount + 1;
+           setDailyScansCount(newCount);
+           localStorage.setItem("carimurah_daily_scans", newCount.toString());
+         }
+       }
       
       // If a preference update or other DB update tool is executed, let's refresh the values
       if (data.toolCalls && data.toolCalls.some((tc: string) => tc.includes("update_user_preferences"))) {
@@ -983,8 +1131,10 @@ export default function App() {
     // Check daily quota for FREE tier (regular and guest users)
     const isFree = !profile?.subscription?.tier || profile?.subscription?.tier === "FREE";
     if (isFree && dailyScansCount >= 3) {
-      setShowQuotaLimitModal(true);
-      return;
+      if (extraCredits <= 0) {
+        setShowQuotaLimitModal(true);
+        return;
+      }
     }
 
     const processingStart = Date.now();
@@ -1035,12 +1185,17 @@ export default function App() {
       }
       const processingEnd = Date.now();
       setAnalysis({ step: "complete", batchResult });
+      triggerToast(`Analisis Berhasil! Potensi hemat Rp${batchResult.totalPotentialSavings.toLocaleString("id-ID")} berhasil ditarik.`, "success");
 
       // Daily quota scan increment for FREE tier
       if (isFree) {
-        const newCount = dailyScansCount + 1;
-        setDailyScansCount(newCount);
-        localStorage.setItem("carimurah_daily_scans", newCount.toString());
+        if (dailyScansCount >= 3) {
+          setExtraCredits(prev => Math.max(0, prev - 1));
+        } else {
+          const newCount = dailyScansCount + 1;
+          setDailyScansCount(newCount);
+          localStorage.setItem("carimurah_daily_scans", newCount.toString());
+        }
       }
 
       if (typeof pendo !== "undefined") {
@@ -1102,6 +1257,11 @@ export default function App() {
       playVoice(batchResult.summaryVoice);
     } catch (error: any) {
       const isTimeout = error === "TIMEOUT" || error.name === "AbortError" || controller.signal.aborted;
+      const errorMsg = isTimeout 
+        ? "Analisis Memakan Waktu Terlalu Lama. Mohon maaf, silakan coba lagi." 
+        : (error.message || "Gagal menghubungi agen pusat.");
+      triggerToast(errorMsg, "error");
+      
       if (isTimeout) {
         console.error("Process Input Timeout/Abort:", error);
         setAnalysis({ 
@@ -1178,6 +1338,236 @@ export default function App() {
       streamRef.current = null;
     }
     setMode(null);
+  };
+
+  const startQrScanner = async () => {
+    setCameraError(null);
+    setMode("qr_scanner");
+    setQrScanningState("idle");
+    setQrMatchedData(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: { ideal: "environment" } 
+        } 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
+      }
+      triggerToast("Kamera QR Scanner Aktif! Siap memindai QR code.", "info");
+    } catch (err: any) {
+      console.error("Camera error inside QR scanner:", err);
+      setCameraError(err.name === "NotAllowedError" || err.name === "PermissionDeniedError" 
+        ? "Izin kamera ditolak. Silakan buka aplikasi di tab baru atau cek pengaturan browser Anda." 
+        : "Gagal mengakses kamera. Pastikan kamera tidak sedang digunakan aplikasi lain.");
+      triggerToast("Gagal mengaktifkan kamera scanner.", "error");
+    }
+  };
+
+  const stopQrScanner = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setMode(null);
+    setQrScanningState("idle");
+    setQrMatchedData(null);
+  };
+
+  const playBeep = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (e) {
+      console.warn("Audio feedback blocked:", e);
+    }
+  };
+
+  const handleSimulatedQrScan = (supplierId: string) => {
+    playBeep();
+    setQrScanningState("matched");
+    
+    let mockResult: BatchAnalysisResult;
+    let label = "";
+    
+    if (supplierId === "SUP-7719") {
+      label = "CV Sahabat Sembako (Supplier ID: SUP-7719)";
+      mockResult = {
+        items: [
+          {
+            productName: "Minyak Goreng Sunco 2L (Karton - 12 Pcs)",
+            brand: "Sunco",
+            currentPrice: 205000,
+            recommendedPrice: 181500,
+            platform: "CV Sahabat Sembako (Supplier Karawang)",
+            url: "#",
+            saving: 23500,
+            rating: 4.9,
+            deliveryDays: "2 Hari",
+            bulkDiscount: "Min. 5 Karton: diskon Rp5.000/karton",
+            features: ["Stok Melimpah", "Ready Pengiriman Kilat", "Sertifikasi Halal & SNI"],
+            stockStatus: "Ready",
+            supplierRating: 4.9,
+            reliabilityScore: 98,
+            landedCost: {
+              basePrice: 181500,
+              shipping: 8500,
+              tax: 0,
+              total: 190000
+            },
+            forecasting: {
+              trend: "down",
+              predictedNextWeek: 180000,
+              reason: "Panen minyak sawit melimpah di wilayah sentra distributor utama Jawa Barat.",
+              history: [
+                { date: "1 Mei", price: 188000 },
+                { date: "8 Mei", price: 185000 },
+                { date: "15 Mei", price: 182000 },
+                { date: "22 Mei", price: 181500 }
+              ]
+            }
+          },
+          {
+            productName: "Tepung Terigu Segitiga Biru 25kg",
+            brand: "Bogasari",
+            currentPrice: 282000,
+            recommendedPrice: 254000,
+            platform: "CV Sahabat Sembako (Supplier Karawang)",
+            url: "#",
+            saving: 28000,
+            rating: 4.8,
+            deliveryDays: "1 Hari",
+            bulkDiscount: "Min. 10 Pcs: diskon Rp4.000/pcs",
+            features: ["Kualitas Roti & Kue Premium", "Asli Bogasari", "Stok Segar langsung Pabrik"],
+            stockStatus: "Ready",
+            supplierRating: 4.9,
+            reliabilityScore: 98,
+            landedCost: {
+              basePrice: 254000,
+              shipping: 12000,
+              tax: 0,
+              total: 266000
+            },
+            forecasting: {
+              trend: "stable",
+              predictedNextWeek: 254000,
+              reason: "Harga gandum impor stabil, kuota pasokan aman.",
+              history: [
+                { date: "1 Mei", price: 256000 },
+                { date: "8 Mei", price: 255000 },
+                { date: "15 Mei", price: 254000 },
+                { date: "22 Mei", price: 254000 }
+              ]
+            }
+          }
+        ],
+        totalCurrentSpent: 487000,
+        totalRecommendedSpent: 435500,
+        totalPotentialSavings: 51500,
+        summaryVoice: "Hasil scan QR CV Sahabat Sembako berhasil ditarik. Total potensi hemat belanja grosir Anda sebesar Rp51.500 dengan prioritas pengiriman 1-2 hari kerja.",
+        rfqStatus: "draft"
+      };
+    } else {
+      label = "Gudang Sembako Karawang (Supplier ID: SUP-0921)";
+      mockResult = {
+        items: [
+          {
+            productName: "Beras Premium Pandan Wangi 50kg (Wholesale)",
+            brand: "Pandan Wangi",
+            currentPrice: 680000,
+            recommendedPrice: 612000,
+            platform: "Gudang Sembako Karawang (Direct Mill)",
+            url: "#",
+            saving: 68000,
+            rating: 4.9,
+            deliveryDays: "3 Hari",
+            bulkDiscount: "Min. 2 Ton: Diskon Rp15.000/karung",
+            features: ["Kualitas Padi Cianjur Asli", "Tanpa Pemutih/Pewangi tambahan", "Sertifikasi Grade A"],
+            stockStatus: "Ready",
+            supplierRating: 4.8,
+            reliabilityScore: 95,
+            landedCost: {
+              basePrice: 612000,
+              shipping: 25000,
+              tax: 0,
+              total: 637000
+            },
+            forecasting: {
+              trend: "down",
+              predictedNextWeek: 608000,
+              reason: "Memasuki masa panen raya di wilayah Jawa Tengah & Jawa Barat, stok berlimpah.",
+              history: [
+                { date: "1 Mei", price: 630000 },
+                { date: "8 Mei", price: 625000 },
+                { date: "15 Mei", price: 620000 },
+                { date: "22 Mei", price: 612000 }
+              ]
+            }
+          }
+        ],
+        totalCurrentSpent: 680000,
+        totalRecommendedSpent: 612000,
+        totalPotentialSavings: 68000,
+        summaryVoice: "Data QR Gudang Sembako Karawang berhasil terintegrasi. Potensi hemat langsung sebesar 68 ribu rupiah untuk tiap karung beras Pandan Wangi 50 kilogram.",
+        rfqStatus: "draft"
+      };
+    }
+
+    setQrMatchedData({ label, mockResult });
+    
+    setTimeout(() => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      setIsB2B(true);
+      setAnalysis({ step: "complete", batchResult: mockResult });
+      setMode(null);
+      setQrScanningState("idle");
+      setQrMatchedData(null);
+      triggerToast(`Hasil QR ${label} Berhasil Diproses!`, "success");
+    }, 1800);
+  };
+
+  const handleSendFeedback = (channel: 'email' | 'discord' | 'telegram') => {
+    if (!feedbackSubject.trim() || !feedbackBody.trim()) {
+      triggerToast("Mohon isi subjek dan draf masukan terlebih dahulu.", "error");
+      return;
+    }
+    
+    setIsSendingFeedback(true);
+    
+    setTimeout(() => {
+      setIsSendingFeedback(false);
+      
+      const emailRecipient = "khudri@binadarma.ac.id";
+      const subjectEncoded = encodeURIComponent(feedbackSubject);
+      const bodyEncoded = encodeURIComponent(feedbackBody);
+      
+      if (channel === "email") {
+        window.location.href = `mailto:${emailRecipient}?subject=${subjectEncoded}&body=${bodyEncoded}`;
+        triggerToast("Membuka klien email Anda untuk mengirim masukan...", "success");
+      } else if (channel === "discord") {
+        window.open("https://discord.gg/khudri-binadarma", "_blank");
+        triggerToast("Menghubungkan ke komunitas Discord Developer kami...", "success");
+      } else {
+        window.open("https://t.me/khudri_support", "_blank");
+        triggerToast("Menghubungkan ke admin Telegram kami...", "success");
+      }
+      
+      setFeedbackSubject("");
+      setFeedbackBody("");
+    }, 1200);
   };
 
   const startRecording = async () => {
@@ -1945,6 +2335,79 @@ export default function App() {
                         </p>
                      </div>
                   </div>
+
+                  {/* Feedback Section */}
+                  <div className={`p-8 rounded-[2rem] border ${isB2B ? "bg-white/5 border-white/10" : "bg-indigo-50/35 border-indigo-100 text-slate-900 dark:text-white"} space-y-6`}>
+                     <div className="space-y-1">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">FEEDBACK CHANNEL</span>
+                        <h3 className="text-xl font-black">Kirim Masukan ke Pengembang</h3>
+                        <p className="text-xs opacity-70">Salurkan ide fitur, saran operasional, atau keluhan teknis Anda directly kepada kami.</p>
+                     </div>
+
+                     <div className="space-y-4">
+                        <div className="space-y-1.5 text-left">
+                           <label className="text-[10px] font-black uppercase tracking-wider opacity-60">Subjek Masukan</label>
+                           <input 
+                             type="text"
+                             value={feedbackSubject}
+                             onChange={(e) => setFeedbackSubject(e.target.value)}
+                             placeholder="Misal: Usul integrasi rute logistik ekspedisi..."
+                             className={`w-full p-4 rounded-xl border text-xs font-semibold outline-none transition-all ${
+                               isB2B 
+                                 ? "bg-slate-900 border-white/10 text-white focus:border-indigo-500" 
+                                 : "bg-white border-slate-200 text-slate-950 focus:border-indigo-500"
+                             }`}
+                           />
+                        </div>
+
+                        <div className="space-y-1.5 text-left">
+                           <label className="text-[10px] font-black uppercase tracking-wider opacity-60">Pesan Masukan</label>
+                           <textarea 
+                             rows={3}
+                             value={feedbackBody}
+                             onChange={(e) => setFeedbackBody(e.target.value)}
+                             placeholder="Tulis kritik konstruktif atau saran fitur baru Anda secara terperinci di sini..."
+                             className={`w-full p-4 rounded-xl border text-xs font-semibold outline-none transition-all resize-none ${
+                               isB2B 
+                                 ? "bg-slate-900 border-white/10 text-white focus:border-indigo-500" 
+                                 : "bg-white border-slate-200 text-slate-950 focus:border-indigo-500"
+                             }`}
+                           />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                           <button 
+                             type="button"
+                             onClick={() => handleSendFeedback("email")}
+                             disabled={isSendingFeedback}
+                             className="py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/15"
+                           >
+                              {isSendingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                              <span>Kirim Email</span>
+                           </button>
+
+                           <button 
+                             type="button"
+                             onClick={() => handleSendFeedback("discord")}
+                             disabled={isSendingFeedback}
+                             className="py-3.5 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#5865F2]/15"
+                           >
+                              {isSendingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                              <span>Discord Hub</span>
+                           </button>
+
+                           <button 
+                             type="button"
+                             onClick={() => handleSendFeedback("telegram")}
+                             disabled={isSendingFeedback}
+                             className="py-3.5 px-4 bg-[#26A5E4] hover:bg-[#1E8BBB] disabled:opacity-50 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-[#26A5E4]/15"
+                           >
+                              {isSendingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                              <span>Telegram</span>
+                           </button>
+                        </div>
+                     </div>
+                  </div>
                </div>
             </motion.section>
           ) : !mode && !analysis ? (
@@ -1963,7 +2426,7 @@ export default function App() {
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform mt-3 cursor-pointer"
                       >
                         <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Sisa Kuota Harian AI: {Math.max(0, 3 - dailyScansCount)} / 3 Gratis • Upgrade ke Pro</span>
+                        <span>Sisa Kuota Harian AI: {Math.max(0, 3 - dailyScansCount)} / 3 Gratis{extraCredits > 0 ? ` (+${extraCredits} Kredit Bonus)` : ""} • Upgrade ke Pro</span>
                         <ChevronRight className="w-3 h-3 text-amber-500" />
                       </button>
                     )}
@@ -1989,11 +2452,19 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <button onClick={startCamera} className={`col-span-3 aspect-video rounded-[2.5rem] flex flex-col items-center justify-center gap-4 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-emerald-500 text-white shadow-emerald-500/20"}`}>
-                  <Camera className="w-12 h-12" />
+                <button onClick={startCamera} className={`col-span-2 aspect-video rounded-[2.5rem] flex flex-col items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-emerald-500 text-white shadow-emerald-500/20"}`}>
+                  <Camera className="w-10 h-10" />
                   <div className="text-center">
-                    <span className="block font-bold text-xl tracking-tight">Kamera AI Scan</span>
-                    <span className="text-xs opacity-70">Nota / Barcode / Produk</span>
+                    <span className="block font-bold text-base tracking-tight leading-tight">Kamera AI Scan</span>
+                    <span className="text-[10px] opacity-70 block mt-0.5">Nota / Barcode / Struk</span>
+                  </div>
+                </button>
+
+                <button onClick={startQrScanner} className={`col-span-1 aspect-video rounded-[2.5rem] flex flex-col items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-indigo-600 text-white shadow-indigo-600/20" : "bg-amber-500 text-white shadow-amber-500/20"}`}>
+                  <QrCode className="w-8 h-8" />
+                  <div className="text-center">
+                    <span className="block font-bold text-xs tracking-tight leading-none">QR Scanner</span>
+                    <span className="text-[8px] opacity-80 uppercase font-black block mt-1 tracking-widest leading-none">Wholesale</span>
                   </div>
                 </button>
 
@@ -2265,6 +2736,139 @@ export default function App() {
                    >
                       <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Send via API WhatsApp/Email
                    </button>
+                </div>
+             </motion.section>
+          ) : mode === "qr_scanner" ? (
+             <motion.section key="qr_scanner" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-black flex flex-col font-sans">
+                {/* Immersive futuristic glassmorphic header overlay */}
+                <div className="absolute top-0 inset-x-0 z-20 p-6 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between text-white">
+                  <div className="space-y-1">
+                    <span className="block text-[8px] font-black tracking-widest uppercase bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full w-fit">LOGISTIK HUB</span>
+                    <h3 className="text-lg font-black tracking-tight" id="qr-scanner-title">CariMurah QR Scanner</h3>
+                  </div>
+                  <button 
+                    id="stop-qr-scanner-btn"
+                    onClick={stopQrScanner} 
+                    className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full text-white transition-all active:scale-95 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Direct full viewport camera stream */}
+                <div className="relative flex-1 bg-slate-950 flex flex-col justify-center">
+                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                  
+                  {cameraError ? (
+                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-10 text-center text-white">
+                        <div className="max-w-xs space-y-6">
+                           <div className="w-16 h-16 bg-rose-500/20 rounded-[2rem] flex items-center justify-center mx-auto">
+                              <AlertCircle className="w-8 h-8 text-rose-500" />
+                           </div>
+                           <h4 className="font-bold text-lg">Akses Kamera Terhambat</h4>
+                           <p className="opacity-70 text-xs leading-relaxed font-semibold">
+                             {cameraError}
+                           </p>
+                           <button 
+                             onClick={() => { setMode(null); window.open(window.location.href, '_blank'); }} 
+                             className="px-6 py-3 bg-white text-slate-950 rounded-xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-transform"
+                           >
+                              Buka di Tab Baru
+                           </button>
+                        </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Interactive Bounding Reticle Target */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-8 pointer-events-none">
+                        <div className="w-72 h-72 border border-white/20 rounded-[2.5rem] relative flex items-center justify-center shadow-[0_0_80px_rgba(245,158,11,0.15)] bg-black/10">
+                          {/* Pulsing Corners */}
+                          <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 rounded-tl-3xl border-amber-500 animate-pulse" />
+                          <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 rounded-tr-3xl border-amber-500 animate-pulse" />
+                          <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 rounded-bl-3xl border-amber-500 animate-pulse" />
+                          <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 rounded-br-3xl border-amber-500 animate-pulse" />
+
+                          {/* Bouncing holographic target lines */}
+                          <div className="absolute inset-8 border border-dashed border-amber-500/30 rounded-2xl animate-pulse" />
+                          
+                          {/* Real-time scan sweep bar */}
+                          <div 
+                            className="absolute left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_20px_rgba(245,158,11,0.8)] pointer-events-none"
+                            style={{
+                              animation: "scanSweep 2.5s infinite ease-in-out"
+                            }}
+                          />
+
+                          {qrScanningState === "matched" ? (
+                            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center p-6 text-center space-y-4">
+                              <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 animate-ping">
+                                <CheckCircle2 className="w-8 h-8" />
+                              </div>
+                              <div className="space-y-1">
+                                <span className="block text-[8px] font-black tracking-widest text-emerald-400 uppercase font-mono">MITRA TERVERIFIKASI</span>
+                                <span className="block text-sm font-black text-white">{qrMatchedData?.label || "Membaca QR..."}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center text-white/55 space-y-1.5 p-6 pointer-events-none select-none">
+                              <QrCode className="w-8 h-8 mx-auto opacity-70 animate-bounce" />
+                              <span className="block text-[10px] font-bold tracking-widest uppercase">POSISI KODE QR</span>
+                              <span className="block text-[8px] font-mono opacity-60">HUB-QR-B2B SYSTEM CLIENT v3.2</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Floating bottom AR hub triggers sheet */}
+                      <div className="absolute bottom-0 inset-x-0 z-30 bg-slate-950/90 backdrop-blur-md border-t border-white/10 rounded-t-[3rem] p-8 text-white space-y-6">
+                        <div className="flex justify-between items-center">
+                          <div className="space-y-1">
+                            <h4 className="text-base font-black tracking-tight" id="demo-subheading">Simulasi Pindai Instan (Demo)</h4>
+                            <p className="text-[10px] text-slate-400">Klik mitra grosir di bawah untuk simulasi scan instan berhadiah database RFQ:</p>
+                          </div>
+                          <span className="text-[10px] font-mono text-amber-500 animate-pulse font-black">● LIVE SCANNER</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <button 
+                            id="scan-demo-sup1-btn"
+                            type="button"
+                            onClick={() => handleSimulatedQrScan("SUP-7719")}
+                            className="p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-indigo-500/30 text-left transition-all flex items-center gap-4 cursor-pointer group active:scale-95"
+                          >
+                            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-xl flex items-center justify-center text-lg font-black shadow-inner shadow-black shrink-0">
+                              SUP1
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <strong className="block text-xs font-black truncate group-hover:text-indigo-400 transition-colors">CV Sahabat Sembako</strong>
+                              <span className="block text-[9px] font-mono text-slate-400 mt-0.5 font-semibold">Supplier Minyak & Tepung Karawang</span>
+                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded mt-1.5 font-bold">Diskon Grosir 12%</span>
+                            </div>
+                          </button>
+
+                          <button 
+                            id="scan-demo-sup2-btn"
+                            type="button"
+                            onClick={() => handleSimulatedQrScan("SUP-0921")}
+                            className="p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-amber-500/30 text-left transition-all flex items-center gap-4 cursor-pointer group active:scale-95"
+                          >
+                            <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center text-lg font-black shadow-inner shadow-black shrink-0">
+                              SUP2
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <strong className="block text-xs font-black truncate group-hover:text-amber-400 transition-colors">Gudang Sembako Karawang</strong>
+                              <span className="block text-[9px] font-mono text-slate-400 mt-0.5 font-semibold">Direct Padi Mill & Beras Premium</span>
+                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-indigo-400 uppercase tracking-wider bg-indigo-500/10 px-1.5 py-0.5 rounded mt-1.5 font-bold">Katalog Terbuka</span>
+                            </div>
+                          </button>
+                        </div>
+
+                        <p className="text-[9px] text-center text-slate-500 font-mono">
+                          Menyokong pemindaian QR Code model ISO/IEC 18004. Hubungi administrator di setting jika tautan terputus.
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
              </motion.section>
           ) : mode === "camera" ? (
@@ -2646,7 +3250,18 @@ export default function App() {
                                    </div>
 
                                    {/* PRO / ENTERPRISE Forecaster */}
-                                   {(profile?.subscription?.tier === "PRO" || profile?.subscription?.tier === "ENTERPRISE") && opt.forecasting && (
+                                   {(!profile?.subscription?.tier || profile?.subscription?.tier === "FREE") ? (
+                                      <button 
+                                        onClick={() => setMode("pricing")}
+                                        className="mt-4 pt-4 border-t border-dashed w-full text-left opacity-60 hover:opacity-100 transition-opacity flex items-center justify-between cursor-pointer group"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <TrendingDown className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">AI 7-Day Forecast 🔒</span>
+                                        </div>
+                                        <span className="text-[7px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest group-hover:bg-amber-500 group-hover:text-black transition-colors">UNLOCK</span>
+                                      </button>
+                                   ) : (profile?.subscription?.tier === "PRO" || profile?.subscription?.tier === "ENTERPRISE") && opt.forecasting && (
                                      <div className="mt-4 pt-4 border-t border-dashed opacity-80">
                                         <div className="flex items-center justify-between mb-3">
                                            <span className="text-[8px] font-black uppercase tracking-widest opacity-40">AI Forecast</span>
@@ -2665,7 +3280,34 @@ export default function App() {
                                    )}
 
                                    {/* ENTERPRISE Landed Cost */}
-                                   {profile?.subscription?.tier === "ENTERPRISE" && item.landedCost && idx === 1 && (
+                                   {profile?.subscription?.tier === "ENTERPRISE" ? (
+                                      item.landedCost && idx === 1 && (
+                                        <div className="mt-4 pt-4 border-t border-dashed opacity-80 space-y-2">
+                                           <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Procurement Insight</span>
+                                           <div className="flex justify-between text-[10px] font-bold">
+                                              <span className="opacity-40 uppercase tracking-tighter">Pajak & Biaya</span>
+                                              <span>Rp{(item.landedCost.tax + item.landedCost.shipping).toLocaleString("id-ID")}</span>
+                                           </div>
+                                           <div className="flex justify-between text-[10px] font-black text-indigo-500">
+                                              <span className="uppercase tracking-tighter">TOTAL LANDED</span>
+                                              <span>Rp{item.landedCost.total.toLocaleString("id-ID")}</span>
+                                           </div>
+                                        </div>
+                                      )
+                                    ) : isB2B && (
+                                      <button 
+                                        onClick={() => setMode("pricing")}
+                                        className="mt-4 pt-4 border-t border-dashed w-full text-left opacity-60 hover:opacity-100 transition-opacity flex items-center justify-between cursor-pointer group"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <Lock className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Landed Cost Calc 🔒</span>
+                                        </div>
+                                        <span className="text-[7px] bg-indigo-550/10 text-indigo-400 px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest group-hover:bg-indigo-500 group-hover:text-white transition-colors">UPGRADE</span>
+                                      </button>
+                                    )}
+
+                                    {false && (
                                      <div className="mt-4 pt-4 border-t border-dashed opacity-80 space-y-2">
                                         <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Procurement Insight</span>
                                         <div className="flex justify-between text-[10px] font-bold">
@@ -2696,9 +3338,15 @@ export default function App() {
 
                                 {opt.url && (
                                   <div className="space-y-2 mt-10">
-                                     <a href={opt.url} target="_blank" className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 ${opt.isWinner ? (isB2B ? "bg-white text-slate-950" : "bg-slate-950 text-white") : "bg-slate-100 text-slate-500"}`}>
-                                       Beli Sekarang <ExternalLink className="w-4 h-4" />
-                                     </a>
+                                     <button 
+                                       onClick={() => {
+                                         setSelectedAffiliateItem({ opt, item });
+                                         setShowAffiliateModal(true);
+                                       }}
+                                       className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${opt.isWinner ? (isB2B ? "bg-white text-slate-950" : "bg-slate-950 text-white") : "bg-slate-100 text-slate-500"}`}
+                                     >
+                                       Beli & Dukung Kami 🔗
+                                     </button>
                                      {profile?.subscription?.tier !== "FREE" && (
                                        <button 
                                          onClick={() => {
@@ -2909,6 +3557,7 @@ export default function App() {
                                      onClick={() => {
                                         navigator.clipboard.writeText(negoText);
                                         setCopiedNegotiation(true);
+                                        triggerToast("Template nego berhasil disalin ke clipboard!", "success");
                                         setTimeout(() => setCopiedNegotiation(false), 2000);
                                      }}
                                      className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-indigo-600/20 active:scale-95"
@@ -2993,6 +3642,79 @@ export default function App() {
                      </ul>
                      <button className="w-full py-4 border-2 border-slate-100 rounded-2xl font-black text-[10px] uppercase opacity-40">Terpilih</button>
                   </div>
+
+                  {/* Paket Sachet / Eceran (Anti Kontradiksi!) */}
+                  <div className="p-8 rounded-[2.5rem] bg-amber-500/10 border border-amber-500/20 space-y-6 text-slate-950">
+                     <div className="space-y-1 text-left">
+                        <span className="inline-flex gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-800">Sachet & Eceran (Bebas Langganan Bulanan)</span>
+                        <h3 className="text-xl font-black">Hemat Gak Pakai Kontradiksi!</h3>
+                        <p className="text-xs opacity-70 leading-relaxed">
+                           Butuh kuota tambahan tapi gak mau boros bayar bulanan? Beli kuota eceran murah meriah ini.
+                           Sangat pas untuk berhemat, sekaligus membantu mendanai kuota database & API Gemini!
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                         <div className="p-5 rounded-3xl bg-white border border-slate-100 flex flex-col justify-between space-y-4 shadow-sm text-left">
+                            <div>
+                               <span className="text-[9px] font-black uppercase text-amber-600 block font-mono">Sachet Lite</span>
+                               <h4 className="text-base font-black">5 Scan Token</h4>
+                               <p className="text-[10px] opacity-60">Paling hemat untuk belanja mingguan.</p>
+                            </div>
+                            <div className="pt-2">
+                               <span className="text-xl font-black text-slate-800 font-mono">Rp5.000</span>
+                               <button 
+                                 onClick={() => {
+                                   initiateMidtransPayment("SACHET5");
+                                 }}
+                                 className="w-full mt-3 py-2.5 bg-amber-400 hover:bg-amber-500 font-extrabold text-[9px] uppercase tracking-widest text-[#0c0d0e] rounded-xl transition-all cursor-pointer text-center"
+                               >
+                                 Beli 5 Scan
+                               </button>
+                            </div>
+                         </div>
+
+                         <div className="p-5 rounded-3xl bg-white border border-slate-100 flex flex-col justify-between space-y-4 shadow-sm text-left relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-2 bg-gradient-to-r from-emerald-500 to-emerald-650 text-white font-black text-[7px] uppercase tracking-wider rounded-bl-xl">Hemat 20%</div>
+                            <div>
+                               <span className="text-[9px] font-black uppercase text-emerald-600 block flex items-center gap-1 font-mono">⭐ Terpopuler</span>
+                               <h4 className="text-base font-black font-sans">15 Scan Token</h4>
+                               <p className="text-[10px] opacity-60">Ideal untuk perbandingan bulanan.</p>
+                            </div>
+                            <div className="pt-2">
+                               <span className="text-xl font-black text-emerald-600 font-mono">Rp12.000</span>
+                               <button 
+                                 onClick={() => {
+                                   initiateMidtransPayment("SACHET15");
+                                 }}
+                                 className="w-full mt-3 py-2.5 bg-emerald-450 hover:bg-emerald-500 font-extrabold text-[9px] uppercase tracking-widest text-[#0c0d0e] rounded-xl transition-all cursor-pointer text-center"
+                               >
+                                 Beli 15 Scan
+                               </button>
+                            </div>
+                         </div>
+
+                         <div className="p-5 rounded-3xl bg-white border border-slate-150 flex flex-col justify-between space-y-4 shadow-sm text-left relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-2 bg-indigo-500 text-white font-black text-[7px] uppercase tracking-wider rounded-bl-xl">Super Irit</div>
+                            <div>
+                               <span className="text-[9px] font-black uppercase text-indigo-500 block font-mono">Saver Pass</span>
+                               <h4 className="text-base font-black">Weekly Saver Pass</h4>
+                               <p className="text-[10px] opacity-60">Pass scan melimpah (100 scan) selama 7 hari.</p>
+                            </div>
+                            <div className="pt-2">
+                               <span className="text-xl font-black text-indigo-500 font-mono">Rp9.900</span>
+                               <button 
+                                 onClick={() => {
+                                   initiateMidtransPayment("WEEKLY_SAVER");
+                                 }}
+                                 className="w-full mt-3 py-2.5 bg-indigo-500 hover:bg-indigo-600 font-extrabold text-[9px] uppercase tracking-widest text-white rounded-xl transition-all cursor-pointer text-center"
+                               >
+                                 Beli Saver Pass
+                               </button>
+                            </div>
+                         </div>
+                      </div>
+                   </div>
 
                   <div className="p-8 rounded-[2.5rem] bg-slate-950 text-white relative overflow-hidden space-y-4 shadow-2xl">
                      <div className="absolute top-0 right-0 p-4 bg-emerald-500 text-slate-950 font-black text-[8px] uppercase tracking-widest rounded-bl-2xl">Paling Laris</div>
@@ -3102,6 +3824,7 @@ export default function App() {
                                  const summary = `CariMurah.ai: Saya baru saja menemukan potensi penghematan sebesar Rp${analysis.batchResult.totalPotentialSavings.toLocaleString("id-ID")}! 🚀\n\n${analysis.batchResult.items.map(it => `- ${it.productName}: Hemat Rp${it.saving.toLocaleString("id-ID")}`).join("\n")}`;
                                  navigator.clipboard.writeText(summary);
                                  setShowShareSuccess(true);
+                                 triggerToast("Draf laporan potensi hemat berhasil disalin ke clipboard!", "success");
                                  setTimeout(() => setShowShareSuccess(false), 2000);
                                }}
                                className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 ${showShareSuccess ? "bg-emerald-500 text-white" : "bg-indigo-500/20 border border-indigo-500/30 text-white"}`}
@@ -3745,19 +4468,18 @@ export default function App() {
           </motion.div>
         )}
 
-        {/* 1. QUIET/STUNNING ACTIVE DAILY QUOTA EXHAUSTED LIMIT MODAL */}
         {showQuotaLimitModal && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
           >
             <motion.div 
               initial={{ scale: 0.95, y: 30 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 30 }}
-              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-center space-y-6 relative overflow-hidden`}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-center space-y-6 relative overflow-hidden my-8`}
             >
               {/* Soft visual background glow */}
               <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -3766,39 +4488,123 @@ export default function App() {
                 <AlertCircle className="w-10 h-10" />
               </div>
 
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black tracking-tight text-balance">Batas 3 Scan Gratis Tercapai!</h3>
-                <p className="text-xs opacity-60 leading-relaxed max-w-sm mx-auto">
-                  Kamu telah menggunakan jatah 3 scan produk harian gratis kamu. Upgrade akunmu untuk pencarian tanpa batas, asisten AI real-time, sirkulasi memo penawaran, & WhatsApp Drop alert!
-                </p>
-              </div>
-
-              {/* Quick stats panel */}
-              <div className={`p-4 rounded-2xl text-left border flex items-center gap-3 ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
-                <div className="flex-1">
-                  <span className="block text-[9px] font-black uppercase tracking-widest opacity-45">Benefit Premium</span>
-                  <span className="text-xs font-bold block">Tanpa Kuota Harian (Unlimited Scans)</span>
+              {sponsoredStep === "watching" ? (
+                <div className="py-8 space-y-4 text-center">
+                  <Loader2 className="w-12 h-12 text-amber-500 animate-spin mx-auto" />
+                  <h4 className="text-lg font-black">Menghubungkan ke Portal Sponsor...</h4>
+                  <p className="text-xs opacity-60 max-w-xs mx-auto leading-relaxed">
+                    Sistem sedang memverifikasi kontribusi afiliasi Anda secara virtual. Tunggu sebentar untuk memuat reward harian.
+                  </p>
                 </div>
-                <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-black">UNLIMITED</div>
-              </div>
+              ) : sponsoredStep === "completed" ? (
+                <div className="py-8 space-y-6 text-center">
+                  <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                    ✓
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-xl font-black">Reward Berhasil Diklaim!</h4>
+                    <p className="text-xs opacity-60 leading-relaxed">
+                      Terima kasih telah membantu mendukung biaya operasional database CariMurah! <strong>+1 Kredit Bonus Scan</strong> berhasil didepositkan.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setSponsoredStep("none");
+                      setShowQuotaLimitModal(false);
+                    }}
+                    className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl transition-transform active:scale-95 cursor-pointer"
+                  >
+                    Mulai Scan Tambahan ⚡
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-black tracking-tight text-balance">Batas 3 Scan Gratis Tercapai!</h3>
+                    <p className="text-xs opacity-60 leading-relaxed max-w-sm mx-auto">
+                      Kamu telah menggunakan jatah 3 scan produk harian gratis kamu. Upgrade akunmu, top up sachet murah, atau selesaikan misi sponsor gratis di bawah ini untuk lanjut!
+                    </p>
+                  </div>
 
-              <div className="grid grid-cols-1 gap-3 pt-2">
-                <button 
-                  onClick={() => {
-                    setShowQuotaLimitModal(false);
-                    setMode("pricing");
-                  }}
-                  className={`w-full py-4 bg-gradient-to-r ${isB2B ? "from-indigo-500 to-indigo-600 shadow-indigo-500/20" : "from-emerald-500 to-emerald-600 shadow-emerald-500/20"} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-95`}
-                >
-                  Lihat Paket Langganan
-                </button>
-                <button 
-                  onClick={() => setShowQuotaLimitModal(false)}
-                  className={`w-full py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
-                >
-                  Tutup
-                </button>
-              </div>
+                  {/* Sachet Quick Link Bar */}
+                  <div className="p-4 rounded-2xl bg-amber-550/10 border border-amber-500/20 text-left flex items-center justify-between gap-2.5">
+                    <div>
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-45">Solusi Eceran</span>
+                      <span className="text-xs font-black block">Paket Sachet Mulai Rp5rb</span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setShowQuotaLimitModal(false);
+                        setMode("pricing");
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-wider rounded-xl hover:scale-95 transition-transform cursor-pointer"
+                    >
+                      Beli Sachet
+                    </button>
+                  </div>
+
+                  {/* Free Sponsored Missions */}
+                  <div className="space-y-2 text-left">
+                    <span className="block text-[9px] font-black uppercase tracking-widest opacity-45 mb-1 font-mono">⚡ Cari Scan Lebih? Selesaikan Misi:</span>
+                    
+                    <div className="space-y-2">
+                      <button 
+                        onClick={() => handleCompleteSponsored("tokopedia")}
+                        className={`w-full p-3.5 rounded-2xl border text-left flex items-center gap-3 transition-all hover:scale-[1.01] cursor-pointer ${isB2B ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"}`}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 font-extrabold text-xs flex items-center justify-center">T</div>
+                        <div className="flex-1">
+                          <span className="font-bold text-xs block">Misi Tokopedia Hemat</span>
+                          <span className="text-[10px] opacity-45 block">Lihat promo partner harian kami</span>
+                        </div>
+                        <div className="px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-mono text-[9px] font-black">+1 Scan</div>
+                      </button>
+
+                      <button 
+                        onClick={() => handleCompleteSponsored("shopee")}
+                        className={`w-full p-3.5 rounded-2xl border text-left flex items-center gap-3 transition-all hover:scale-[1.01] cursor-pointer ${isB2B ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"}`}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-orange-500/10 text-orange-500 font-extrabold text-xs flex items-center justify-center">S</div>
+                        <div className="flex-1">
+                          <span className="font-bold text-xs block">Misi Shopee Voucher</span>
+                          <span className="text-[10px] opacity-45 block">Verifikasi Voucher Cashback partner</span>
+                        </div>
+                        <div className="px-2 py-1 rounded-lg bg-orange-500/15 text-orange-800 dark:text-orange-300 font-mono text-[9px] font-black">+1 Scan</div>
+                      </button>
+
+                      <button 
+                        onClick={() => handleCompleteSponsored("share")}
+                        className={`w-full p-3.5 rounded-2xl border text-left flex items-center gap-3 transition-all hover:scale-[1.01] cursor-pointer ${isB2B ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"}`}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-500 font-extrabold text-xs flex items-center justify-center">W</div>
+                        <div className="flex-1">
+                          <span className="font-bold text-xs block">Sebar CariMurah WA</span>
+                          <span className="text-[10px] opacity-45 block">Bantu promosikan kami gratis</span>
+                        </div>
+                        <div className="px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 font-mono text-[9px] font-black">+1 Scan</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 pt-2">
+                    <button 
+                      onClick={() => {
+                        setShowQuotaLimitModal(false);
+                        setMode("pricing");
+                      }}
+                      className={`w-full py-4 bg-gradient-to-r ${isB2B ? "from-indigo-500 to-indigo-600 shadow-indigo-500/20" : "from-emerald-500 to-emerald-600 shadow-emerald-500/20"} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-95`}
+                    >
+                      Langganan Unlimited PRO
+                    </button>
+                    <button 
+                      onClick={() => setShowQuotaLimitModal(false)}
+                      className={`w-full py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -3848,13 +4654,13 @@ export default function App() {
                     <div>
                       <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Paket Terpilih</span>
                       <span className="font-extrabold text-xs text-emerald-500 font-mono">
-                        {paymentPlan === "PRO" ? "PRO TIER (Smart Saver)" : "ENTERPRISE TIER"}
+                        {getPlanName(paymentPlan)}
                       </span>
                     </div>
                     <div className="text-right">
                       <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Total Tagihan</span>
                       <span className="text-sm font-extrabold font-mono text-emerald-500">
-                        {paymentPlan === "PRO" ? "Rp49.000" : "Rp1.490.000"}
+                        {getPlanPrice(paymentPlan)}
                       </span>
                     </div>
                   </div>
@@ -3912,13 +4718,13 @@ export default function App() {
                     <div>
                       <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Paket Terpilih</span>
                       <span className="font-extrabold text-sm text-emerald-500 font-mono">
-                        {paymentPlan === "PRO" ? "PRO TIER (Smart Saver)" : "ENTERPRISE TIER"}
+                        {getPlanName(paymentPlan)}
                       </span>
                     </div>
                     <div className="text-right">
                       <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Total Tagihan</span>
                       <span className="text-base font-extrabold font-mono text-emerald-500">
-                        {paymentPlan === "PRO" ? "Rp49.000" : "Rp1.490.000"}
+                        {getPlanPrice(paymentPlan)}
                       </span>
                     </div>
                   </div>
@@ -4009,7 +4815,7 @@ export default function App() {
                             <button 
                               onClick={() => {
                                 navigator.clipboard.writeText("8802910812345678");
-                                alert("Nomor VA berhasil disalin ke clipboard!");
+                                triggerToast("Nomor VA berhasil disalin ke clipboard!", "success");
                               }}
                               className="px-3 py-1.5 bg-slate-200 dark:bg-white/10 rounded-lg text-[9px] font-black uppercase tracking-wider hover:scale-95 transition-transform"
                             >
@@ -4131,6 +4937,139 @@ export default function App() {
             </motion.div>
           </motion.div>
         )}
+
+        {/* 3. EXCLUSIVE INTERACTIVE AFFILIATE REDIRECTION MODAL */}
+        {showAffiliateModal && selectedAffiliateItem && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 text-left relative overflow-hidden`}
+            >
+              {/* Glow accent */}
+              <div className="absolute -top-10 -left-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex justify-between items-start border-b border-dashed pb-4">
+                <div className="space-y-1">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-500">
+                     Official CariMurah Partner Link
+                  </span>
+                  <h3 className="text-2xl font-black tracking-tight">Koneksi Hemat Afiliasi</h3>
+                  <p className="text-xs opacity-60">Penuhi keranjang belanjamu sembari beramal server.</p>
+                </div>
+                <button 
+                  onClick={() => setShowAffiliateModal(false)}
+                  className={`p-2 rounded-full cursor-pointer transition-colors ${isB2B ? "bg-white/5 hover:bg-white/10" : "bg-slate-100 hover:bg-slate-200"}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {affiliateRedirecting ? (
+                <div className="py-10 text-center space-y-6">
+                  <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto" />
+                  <div className="space-y-2">
+                    <h4 className="text-base font-black">Mengalihkan ke {selectedAffiliateItem.opt.name || "Marketplace"}...</h4>
+                    <p className="text-xs opacity-60 max-w-xs mx-auto leading-relaxed">
+                      Menyiapkan link afiliasi khusus, menyisipkan cashback virtual, & mendaftarkan bonus kuota harian Anda hulu-hilir.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-950 p-4 rounded-2xl font-mono text-[9px] text-emerald-400 space-y-1 text-left border border-white/5 shadow-inner">
+                    <div>[SYS] Affiliate Routing initiated for: {selectedAffiliateItem.opt.name}</div>
+                    <div>[SYS] Token signature: SHA-256/carimurah-partner-...</div>
+                    <div>[SYS] Reward verified: +1 FREE SCAN token queued!</div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Product card inside affiliate dialog */}
+                  <div className={`p-4 rounded-2xl border flex items-center gap-3 ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                    <div className="w-14 h-14 rounded-xl bg-indigo-500/10 text-indigo-500 font-black text-xs flex items-center justify-center font-mono">
+                      {selectedAffiliateItem.opt.name ? selectedAffiliateItem.opt.name.substring(0, 3).toUpperCase() : "PROD"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Target Belanja</span>
+                      <strong className="block text-xs font-black truncate">{selectedAffiliateItem.item?.productName || "Produk Pilihan"}</strong>
+                      <span className="text-[10px] font-bold text-emerald-500 font-mono">
+                        Rp{(selectedAffiliateItem.opt.price || 0).toLocaleString("id-ID")} • via {selectedAffiliateItem.opt.name}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black uppercase tracking-widest opacity-45 block">Bagaimana Cara Kerjanya?</h4>
+                    <p className="text-xs opacity-75 leading-relaxed">
+                      Dengan mengklik tombol di bawah, Anda akan diarahkan ke toko mitra resmi kami. CariMurah akan memperoleh komisi minor <strong>(1% - 3%)</strong> langsung dari pihak toko tanpa menaikkan harga belanja Anda sepeser pun.
+                    </p>
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/20 text-xs font-bold leading-relaxed flex items-center gap-2">
+                      <span className="text-lg">💰</span>
+                      <span><strong>Spesial Reward:</strong> Redireksi sukses akan menghadiahkan akun Anda <strong>+1 Kredit Bonus Scan</strong> secara instan!</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 pt-2">
+                    <button 
+                      onClick={handleAffiliateRedirect}
+                      className="w-full py-4 bg-emerald-505 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-emerald-500/10 active:scale-95 transition-transform cursor-pointer text-center"
+                    >
+                      Buka & Dapatkan +1 Kredit Scan ↗
+                    </button>
+                    <button 
+                      onClick={() => setShowAffiliateModal(false)}
+                      className={`w-full py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 text-slate-300 hover:bg-white/10" : "bg-slate-100 text-slate-750 hover:bg-slate-200"}`}
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Dynamic Premium Toaster Container */}
+        <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-3 max-w-sm w-full pointer-events-none px-4 sm:px-0">
+          <AnimatePresence>
+            {toasts.map((toast) => (
+              <motion.div
+                key={toast.id}
+                initial={{ opacity: 0, y: 30, scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.9 }}
+                layout
+                className={`pointer-events-auto p-4 rounded-3xl shadow-2xl flex items-start gap-3 border text-xs leading-relaxed ${
+                  toast.type === "success" 
+                    ? "bg-slate-900 border-slate-700 text-slate-100 shadow-emerald-500/10"
+                    : toast.type === "error"
+                    ? "bg-rose-950 border-rose-800 text-rose-50"
+                    : toast.type === "warning"
+                    ? "bg-amber-950 border-amber-850 text-amber-50"
+                    : "bg-slate-900 border-slate-800 text-slate-100"
+                }`}
+              >
+                {toast.type === "success" && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
+                {toast.type === "error" && <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />}
+                {toast.type === "warning" && <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+                {toast.type === "info" && <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />}
+                
+                <div className="flex-1 font-semibold">{toast.message}</div>
+                <button 
+                  onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+                  className="text-slate-400 hover:text-slate-200 shrink-0 ml-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
       </AnimatePresence>
     </div>
   );
