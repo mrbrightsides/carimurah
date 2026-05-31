@@ -312,6 +312,26 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [isB2B, setIsB2B] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showQrHistoryDrawer, setShowQrHistoryDrawer] = useState(false);
+  const [qrScannedHistory, setQrScannedHistory] = useState<{
+    id: string;
+    supplierId: string;
+    supplierName: string;
+    date: string;
+    savings: number;
+    itemsCount: number;
+  }[]>(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_qr_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [showQrFeedbackModal, setShowQrFeedbackModal] = useState(false);
+  const [qrFeedbackReason, setQrFeedbackReason] = useState<"failed" | "incorrect" | "other">("failed");
+  const [qrFeedbackDetails, setQrFeedbackDetails] = useState("");
+  const [showQrHelpModal, setShowQrHelpModal] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [profileState, setProfileState] = useState<UserProfile | null>(DEFAULT_GUEST_PROFILE);
   const profile = useMemo(() => {
@@ -1525,7 +1545,7 @@ export default function App() {
 
     setQrMatchedData({ label, mockResult });
     
-    setTimeout(() => {
+    setTimeout(async () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
@@ -1536,6 +1556,55 @@ export default function App() {
       setQrScanningState("idle");
       setQrMatchedData(null);
       triggerToast(`Hasil QR ${label} Berhasil Diproses!`, "success");
+
+      // Save to main history system as B2B containing Supplier ID
+      const noteText = `Scanned via QR (Supplier ID: ${supplierId})`;
+      const newItem: HistoryItem = {
+        id: Math.random().toString(36).substring(2, 11),
+        date: new Date().toLocaleDateString("id-ID"),
+        totalSaved: mockResult.totalPotentialSavings,
+        itemsCount: mockResult.items.length,
+        type: "B2B",
+        result: mockResult,
+        note: noteText
+      };
+
+      try {
+        if (user) {
+          await saveHistory(user.uid, {
+            date: new Date().toISOString(),
+            totalSaved: mockResult.totalPotentialSavings,
+            itemsCount: mockResult.items.length,
+            type: "B2B",
+            result: mockResult,
+            note: noteText
+          });
+          await loadHistoryFromDB(user.uid);
+        } else {
+          const updated = [newItem, ...history].slice(0, 10);
+          setHistory(updated);
+          localStorage.setItem("carimurah_history", JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.error("Error logging QR scan B2B history:", err);
+      }
+
+      // Track last 5 QR scans locally & in dedicated list
+      const timestamp = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " - " + new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+      const newQrItem = {
+        id: Math.random().toString(36).substring(2, 11),
+        supplierId,
+        supplierName: supplierId === "SUP-7719" ? "CV Sahabat Sembako" : "Gudang Sembako Karawang",
+        date: timestamp,
+        savings: mockResult.totalPotentialSavings,
+        itemsCount: mockResult.items.length
+      };
+
+      setQrScannedHistory(prev => {
+        const next = [newQrItem, ...prev].slice(0, 5);
+        localStorage.setItem("carimurah_qr_history", JSON.stringify(next));
+        return next;
+      });
     }, 1800);
   };
 
@@ -2452,19 +2521,19 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <button onClick={startCamera} className={`col-span-2 aspect-video rounded-[2.5rem] flex flex-col items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-emerald-500 text-white shadow-emerald-500/20"}`}>
-                  <Camera className="w-10 h-10" />
+                <button onClick={startCamera} className={`col-span-3 h-28 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-emerald-500 text-white shadow-emerald-500/20"}`}>
+                  <Camera className="w-9 h-9" />
                   <div className="text-center">
                     <span className="block font-bold text-base tracking-tight leading-tight">Kamera AI Scan</span>
                     <span className="text-[10px] opacity-70 block mt-0.5">Nota / Barcode / Struk</span>
                   </div>
                 </button>
 
-                <button onClick={startQrScanner} className={`col-span-1 aspect-video rounded-[2.5rem] flex flex-col items-center justify-center gap-3 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-indigo-600 text-white shadow-indigo-600/20" : "bg-amber-500 text-white shadow-amber-500/20"}`}>
+                <button onClick={startQrScanner} className={`col-span-3 h-28 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-indigo-600 text-white shadow-indigo-600/20" : "bg-amber-500 text-white shadow-amber-500/20"}`}>
                   <QrCode className="w-8 h-8" />
                   <div className="text-center">
-                    <span className="block font-bold text-xs tracking-tight leading-none">QR Scanner</span>
-                    <span className="text-[8px] opacity-80 uppercase font-black block mt-1 tracking-widest leading-none">Wholesale</span>
+                    <span className="block font-bold text-base tracking-tight leading-tight">QR Scanner</span>
+                    <span className="text-[10px] opacity-85 uppercase font-black block mt-1 tracking-widest leading-none">Wholesale Depot</span>
                   </div>
                 </button>
 
@@ -2744,7 +2813,27 @@ export default function App() {
                 <div className="absolute top-0 inset-x-0 z-20 p-6 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between text-white">
                   <div className="space-y-1">
                     <span className="block text-[8px] font-black tracking-widest uppercase bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full w-fit">LOGISTIK HUB</span>
-                    <h3 className="text-lg font-black tracking-tight" id="qr-scanner-title">CariMurah QR Scanner</h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <h3 className="text-lg font-black tracking-tight" id="qr-scanner-title">CariMurah QR Scanner</h3>
+                      <div className="flex gap-2 mt-1 sm:mt-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowQrHistoryDrawer(true)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer border border-white/10"
+                        >
+                          <HistoryIcon className="w-3 h-3 text-amber-500" />
+                          <span className="text-amber-400">History</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowQrHelpModal(true)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer border border-white/10"
+                        >
+                          <Info className="w-3 h-3 text-indigo-400" />
+                          <span className="text-indigo-400 font-bold">Panduan</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <button 
                     id="stop-qr-scanner-btn"
@@ -2867,6 +2956,259 @@ export default function App() {
                           Menyokong pemindaian QR Code model ISO/IEC 18004. Hubungi administrator di setting jika tautan terputus.
                         </p>
                       </div>
+
+                      {/* Floating Feedback FAB */}
+                      <button
+                        type="button"
+                        onClick={() => setShowQrFeedbackModal(true)}
+                        className="absolute right-6 bottom-[360px] sm:bottom-[240px] z-[50] px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-full shadow-lg shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer border border-rose-500/25 transition-all pointer-events-auto animate-pulse"
+                      >
+                        <AlertTriangle className="w-4 h-4" />
+                        <span className="text-[10px] font-black uppercase tracking-wider">Lapor Gagal/Salah</span>
+                      </button>
+
+                      {/* QR Scanned History Drawer */}
+                      <AnimatePresence>
+                        {showQrHistoryDrawer && (
+                          <motion.div 
+                            initial={{ x: "100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "100%" }}
+                            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                            className="absolute inset-y-0 right-0 z-[110] w-full sm:w-96 bg-slate-950/95 backdrop-blur-xl border-l border-white/10 p-6 text-white flex flex-col justify-between shadow-2xl pointer-events-auto"
+                          >
+                            <div className="space-y-6">
+                              <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                                <div className="flex items-center gap-2">
+                                  <HistoryIcon className="w-5 h-5 text-amber-500" />
+                                  <h4 className="font-black text-base tracking-tight">Riwayat Pindai QR (B2B)</h4>
+                                </div>
+                                <button 
+                                  onClick={() => setShowQrHistoryDrawer(false)}
+                                  className="p-1.5 hover:bg-white/10 rounded-full transition-colors cursor-pointer"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
+                                Berikut adalah daftar 5 kode QR grosir/B2B terakhir yang berhasil dipindai dan diproses ke dalam database RFQ Anda.
+                              </p>
+
+                              <div className="space-y-3 overflow-y-auto max-h-[70vh] pr-1">
+                                {qrScannedHistory.length === 0 ? (
+                                  <div className="py-12 text-center text-slate-500 space-y-3">
+                                    <QrCode className="w-12 h-12 mx-auto stroke-1 stroke-slate-500 animate-pulse" />
+                                    <span className="block text-xs font-semibold">Belum ada riwayat pindaian.</span>
+                                    <span className="block text-[10px] opacity-70">Gunakan simulator scan di bawah untuk mencoba!</span>
+                                  </div>
+                                ) : (
+                                  qrScannedHistory.map((item) => (
+                                    <div 
+                                      key={item.id} 
+                                      className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-all space-y-2 relative"
+                                    >
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <span className="block text-[9px] font-black text-amber-500 uppercase tracking-wider">{item.supplierId}</span>
+                                          <strong className="block text-xs font-extrabold text-white">{item.supplierName}</strong>
+                                        </div>
+                                        <span className="text-[9px] font-mono text-slate-400">{item.date}</span>
+                                      </div>
+                                      
+                                      <div className="flex items-center justify-between pt-1 border-t border-white/5 text-[10px]">
+                                        <span className="text-slate-400 font-semibold">{item.itemsCount} Produk Terdeteksi</span>
+                                        <span className="font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                                          Hemat Rp{item.savings.toLocaleString("id-ID")}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="border-t border-white/10 pt-4 text-center">
+                              <span className="text-[9px] font-mono text-slate-500 uppercase font-bold">TOTAL DATABASE RIWAYAT QR</span>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Overlay Help Modal */}
+                      <AnimatePresence>
+                        {showQrHelpModal && (
+                          <div className="absolute inset-0 z-[120] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 pointer-events-auto">
+                            <motion.div 
+                              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                              className="bg-slate-900 border border-indigo-900/40 rounded-[2.5rem] max-w-md w-full p-6 space-y-6 text-white shadow-2xl shadow-indigo-950/10"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
+                                    <Info className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-sm tracking-tight text-indigo-200">Panduan QR Scanner</h4>
+                                    <span className="block text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest mt-0.5">HUB INSTRUCTIONS</span>
+                                  </div>
+                                </div>
+                                <button 
+                                  onClick={() => setShowQrHelpModal(false)}
+                                  className="p-1 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer text-slate-400"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-4 text-xs font-semibold">
+                                <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 space-y-2">
+                                  <h5 className="font-black text-indigo-300 text-[11px] uppercase tracking-wider">Keuntungan Input RFQ Otomatis</h5>
+                                  <p className="text-[10px] text-slate-300 leading-relaxed font-semibold">
+                                    Sistem memetakan kode katalog terenkripsi dari distributor grosir langsung ke program otonom kami. Menghindari input manual ribuan produk, sistem instan menyinkronkan diskon tiering, komparasi harga, dan estimasi waktu pengiriman logistik secara real-time.
+                                  </p>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <div className="flex gap-3">
+                                    <div className="w-6 h-6 bg-slate-800 text-amber-500 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5 font-mono">
+                                      1
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <strong className="block text-slate-200 font-bold">Posisikan di Dalam Grid Kuning</strong>
+                                      <span className="block text-[10px] text-slate-400 font-semibold leading-relaxed">Letakkan kode QR fisik supplier tepat di tengah reticle target scanner yang berkilat kuning.</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-3">
+                                    <div className="w-6 h-6 bg-slate-800 text-amber-500 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5 font-mono">
+                                      2
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <strong className="block text-slate-200 font-bold">Pertahankan Cahaya & Fokus</strong>
+                                      <span className="block text-[10px] text-slate-400 font-semibold leading-relaxed">Hindari pantulan cahaya lampu berlebih di kertas atau plastik agar kamera dapat membaca ISO/IEC 18004 otonom.</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-3">
+                                    <div className="w-6 h-6 bg-slate-800 text-amber-500 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5 font-mono">
+                                      3
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <strong className="block text-slate-200 font-bold">Simpan ke RFQ & Analis Potensi</strong>
+                                      <span className="block text-[10px] text-slate-400 font-semibold leading-relaxed">Data yang cocok langsung dialihkan menjadi draf RFQ untuk Anda kirim via WhatsApp Web atau Email ke Supplier.</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <button 
+                                onClick={() => setShowQrHelpModal(false)}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer"
+                              >
+                                Paham, Mulai Scan
+                              </button>
+                            </motion.div>
+                          </div>
+                        )}
+                      </AnimatePresence>
+
+                      {/* Overlay Feedback Modal */}
+                      <AnimatePresence>
+                        {showQrFeedbackModal && (
+                          <div className="absolute inset-0 z-[120] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 pointer-events-auto">
+                            <motion.div 
+                              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                              className="bg-slate-900 border border-rose-900/40 rounded-[2.5rem] max-w-sm w-full p-6 space-y-5 text-white shadow-2xl shadow-rose-950/10"
+                            >
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center text-rose-400">
+                                    <AlertTriangle className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <h4 className="font-black text-sm tracking-tight text-rose-200">Laporkan Isu Scan</h4>
+                                    <span className="block text-[9px] font-mono text-slate-400 uppercase font-black tracking-widest mt-0.5">FEEDBACK PORTAL</span>
+                                  </div>
+                                </div>
+                                <button 
+                                  type="button"
+                                  onClick={() => { setShowQrFeedbackModal(false); setQrFeedbackDetails(""); }}
+                                  className="p-1 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer text-slate-400"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-4">
+                                <div className="space-y-1.5 font-semibold text-left">
+                                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Pilih Masalah / Isu</label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] font-bold uppercase tracking-wider">
+                                    <button 
+                                      type="button"
+                                      onClick={() => setQrFeedbackReason("failed")}
+                                      className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${
+                                        qrFeedbackReason === "failed" 
+                                          ? "bg-rose-500/10 border-rose-500 text-rose-200" 
+                                          : "bg-slate-800/50 border-white/5 text-slate-400 hover:bg-slate-800"
+                                      }`}
+                                    >
+                                      Gagal Pindai (Kamera/QR)
+                                    </button>
+                                    <button 
+                                      type="button"
+                                      onClick={() => setQrFeedbackReason("incorrect")}
+                                      className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${
+                                        qrFeedbackReason === "incorrect" 
+                                          ? "bg-rose-500/10 border-rose-500 text-rose-200" 
+                                          : "bg-slate-800/50 border-white/5 text-slate-400 hover:bg-slate-800"
+                                      }`}
+                                    >
+                                      Hasil Salah / Meleset
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5 text-left">
+                                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detail Kendala</label>
+                                  <textarea
+                                    rows={3}
+                                    value={qrFeedbackDetails}
+                                    onChange={(e) => setQrFeedbackDetails(e.target.value)}
+                                    placeholder="Misal: QR Code dari Gudang Sembako Indramayu gagal dipindai terus..."
+                                    className="w-full text-xs font-semibold p-3.5 bg-slate-950 border border-white/10 rounded-xl focus:border-rose-500 outline-none text-white resize-none transition-all placeholder:text-slate-600"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button 
+                                  type="button"
+                                  onClick={() => { setShowQrFeedbackModal(false); setQrFeedbackDetails(""); }}
+                                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-black text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    triggerToast("Kritik & draf kendala scan berhasil dilaporkan ke tim analis!", "success");
+                                    setShowQrFeedbackModal(false);
+                                    setQrFeedbackDetails("");
+                                  }}
+                                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-rose-600/20 cursor-pointer"
+                                >
+                                  Kirim Laporan
+                                </button>
+                              </div>
+                            </motion.div>
+                          </div>
+                        )}
+                      </AnimatePresence>
                     </>
                   )}
                 </div>
