@@ -34,6 +34,7 @@ CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt
 ### 🥇 Enterprise Tier: Procurement Pro (Rp1.490.000 / mo.)
 *   **Target**: UMKM & Corporate Procurement managers.
 *   **Features**:
+    *   **B2B QR Catalog Scanner & Ledger**: Instant barcode and QR catalog translation for wholesalers. Includes a slide-out history drawer tracking the last 5 scanned records, detected item logs, and potential corporate savings.
     *   **Autonomous RFQ Workflow**: Generates print/PDF-ready official Request for Quotation documents for bulk vendor distribution.
     *   **AI Bargain & Negotiation Script Helper**: Generate highly tailored negotiation scripts based on posture (Collaborative, Aggressive, Tactical) to connect with WhatsApp suppliers.
     *   **Landed Cost & Logistics**: Calculates true "Apple-to-Apple" costs including bulk cargo shipping, processing, and handling fees.
@@ -43,6 +44,7 @@ CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt
 
 ## 🛠️ Unified Core Capabilities
 
+*   **Integrated B2B QR Scanner & Ledger Suite**: Uses an optimized stacked trigger layout for single-handed mobile usage. Features an overlay-based Interactive Guide (*Panduan*), a sliding scan ledger showing the last 5 successful matches (saving/items audit), and a context-aware feedback/reporting FAB directly embedded within the viewfinder.
 *   **Predictive AI Cycle Engine**: Simulates discount patterns during Payday (8% off), Double Date (15% off), or Midnight Flash Sales (20% off) dynamically.
 *   **AI Bargain Generator**: Creates customized negotiation transcripts in professional, friendly, or agressive Indonesian tones for direct Wholesaler WhatsApp chats.
 *   **Autonomous Progress Tracker**: Gives physical progress and steps (e.g., *Auditing Shopee indexes*, *Analyzing Cargo freight rates*) for AI scans.
