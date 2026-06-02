@@ -65,9 +65,18 @@ import {
   Info
 } from "lucide-react";
 import Markdown from "react-markdown";
+import { Capacitor } from "@capacitor/core";
+import { Camera as CapacitorCamera } from "@capacitor/camera";
+import { VoiceRecorder } from "capacitor-voice-recorder";
 import type { InputMode, AnalysisState, BatchAnalysisResult, HistoryItem, UserProfile, ItemAnalysis, MarketOption } from "./types";
-import { auth, loginWithGoogle as firebaseLoginWithGoogle, logout as firebaseLogout, saveHistory, getHistory, getUserProfile, updateProfile, deleteHistoryItems, updateHistoryItem } from "./lib/mongodb_client";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { auth, onAuthStateChanged, login as mongoLogin, register as mongoRegister, loginWithGoogle as firebaseLoginWithGoogle, logout as firebaseLogout, saveHistory, getHistory, getUserProfile, updateProfile, deleteHistoryItems, updateHistoryItem } from "./lib/mongodb_client";
+
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
 
 function CountingNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
   const [displayValue, setDisplayValue] = useState(0);
@@ -711,68 +720,132 @@ export default function App() {
     }, 2500);
   };
   
-  // Sandbox login states for preview-safe authentication
+  // ✅ 1. Pure MongoDB Atlas Authentication states
   const [showSandboxLogin, setShowSandboxLogin] = useState(false);
-  const [sandboxEmail, setSandboxEmail] = useState("Email Kamu");
-  const [sandboxName, setSandboxName] = useState("Nama Kamu");
+  const [mongoAuthTab, setMongoAuthTab] = useState<"login" | "register">("login");
+  const [sandboxEmail, setSandboxEmail] = useState("");
+  const [sandboxName, setSandboxName] = useState("");
+  const [mongoPassword, setMongoPassword] = useState("");
+  const [mongoAuthError, setMongoAuthError] = useState<string | null>(null);
+  const [mongoAuthLoading, setMongoAuthLoading] = useState(false);
 
-  const handleLoginClick = async () => {
+  // ✅ 2 & 3. MongoDB Search Engine states
+  const [searchEngine, setSearchEngine] = useState<"gemini" | "atlas" | "vector">("gemini");
+  const [mongoSearchResults, setMongoSearchResults] = useState<any[]>([]);
+  const [mongoPipelineLog, setMongoPipelineLog] = useState("");
+  const [mongoDiagnosticLog, setMongoDiagnosticLog] = useState("");
+  const [mongoSearchType, setMongoSearchType] = useState("");
+  const [mongoSearchLoading, setMongoSearchLoading] = useState(false);
+
+  const handleMongoSearch = async (type: "atlas" | "vector") => {
+    if (!manualText) return;
+    setMongoSearchLoading(true);
+    setMongoSearchResults([]);
+    setMongoPipelineLog("");
+    setMongoDiagnosticLog("");
     try {
-      await firebaseLoginWithGoogle();
-    } catch (err: any) {
-      console.error("Login with Google failed:", err);
-      // Automatically fallback to sandbox login modal
-      setShowSandboxLogin(true);
+      const endpoint = type === "atlas" 
+        ? `/api/products/search?q=${encodeURIComponent(manualText)}` 
+        : `/api/products/vector-search?q=${encodeURIComponent(manualText)}`;
+      const res = await fetch(endpoint);
+      const output = await res.json();
+      if (output.status === "success") {
+        setMongoSearchResults(output.data);
+        setMongoPipelineLog(output.pipeline);
+        setMongoDiagnosticLog(output.log || output.embeddingLog || "");
+        setMongoSearchType(output.searchType);
+      } else {
+        throw new Error(output.error || "Gagal melakukan pencarian katalog.");
+      }
+    } catch (e: any) {
+      console.error(e);
+      setMongoDiagnosticLog(`[Error] ${e.message}`);
+    } finally {
+      setMongoSearchLoading(false);
     }
+  };
+
+  const [aggStats, setAggStats] = useState<any>(null);
+  const [aggLoading, setAggLoading] = useState(false);
+  const [showAggQuery, setShowAggQuery] = useState(false);
+
+  useEffect(() => {
+    if (user?.uid) {
+      setAggLoading(true);
+      fetch(`/api/stats/aggregation?uid=${user.uid}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === "success") {
+            setAggStats(data.data);
+          }
+        })
+        .catch(err => console.error("Aggregation stats load error:", err))
+        .finally(() => setAggLoading(false));
+    } else {
+      setAggStats(null);
+    }
+  }, [user, history]);
+
+  const handleLoginClick = () => {
+    setMongoAuthTab("login");
+    setMongoAuthError(null);
+    setShowSandboxLogin(true);
   };
 
   const handleSandboxLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sandboxEmail) return;
-    const mockUid = "sandbox-" + btoa(sandboxEmail).replace(/=/g, "").toLowerCase();
-    const mockUser = {
-      uid: mockUid,
-      email: sandboxEmail,
-      displayName: sandboxName || "User Demo",
-      photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=" + sandboxName,
-      emailVerified: true,
-      metadata: {},
-      providerData: []
-    };
-    
-    setUser(mockUser as any);
-    localStorage.setItem("carimurah_sandbox_user", JSON.stringify(mockUser));
-    
-    // Fetch profile and history from database
-    loadHistoryFromDB(mockUid);
-    const p = await getUserProfile(mockUid);
-    setProfile(p || { 
-      uid: mockUid, 
-      displayName: sandboxName || "User Demo", 
-      email: sandboxEmail,
-      photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=" + sandboxName,
-      subscription: { tier: "FREE", expiresAt: "" },
-      preferences: {
-        currency: "IDR",
-        language: "id",
-        notifyOnBetterPrices: true,
-        b2bFocus: "price",
-        showTrendChartsByDefault: false
+    if (!sandboxEmail || !mongoPassword) return;
+    setMongoAuthLoading(true);
+    setMongoAuthError(null);
+    try {
+      let activeUser;
+      if (mongoAuthTab === "login") {
+        activeUser = await mongoLogin(sandboxEmail, mongoPassword);
+      } else {
+        if (!sandboxName) {
+          throw new Error("Nama Lengkap wajib diisi untuk mendaftar.");
+        }
+        activeUser = await mongoRegister(sandboxEmail, mongoPassword, sandboxName);
       }
-    });
-    
-    if (typeof pendo !== "undefined") {
-      pendo.track("user_login_completed", {
-        method: "sandbox",
-        visitor_id: mockUid,
-        email: sandboxEmail
+
+      setUser(activeUser);
+      loadHistoryFromDB(activeUser.uid);
+      const p = await getUserProfile(activeUser.uid);
+      setProfile(p || {
+        uid: activeUser.uid,
+        displayName: activeUser.displayName || sandboxName || "User Demo",
+        email: activeUser.email,
+        photoURL: activeUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${sandboxName}`,
+        subscription: { tier: "FREE", expiresAt: "" },
+        preferences: {
+          currency: "IDR",
+          language: "id",
+          notifyOnBetterPrices: true,
+          b2bFocus: "price",
+          showTrendChartsByDefault: false
+        }
       });
+
+      if (typeof pendo !== "undefined") {
+        pendo.track("user_login_completed", {
+          method: "mongodb-atlas-auth",
+          visitor_id: activeUser.uid,
+          email: sandboxEmail
+        });
+      }
+
+      // Clear fields
+      setMongoPassword("");
+      setShowSandboxLogin(false);
+    } catch (err: any) {
+      console.error("MongoDB Atlas authentication error:", err);
+      setMongoAuthError(err.message || "Kombinasi email atau password salah.");
+    } finally {
+      setMongoAuthLoading(false);
     }
-    setShowSandboxLogin(false);
   };
 
   const handleLogoutClick = async () => {
-    localStorage.removeItem("carimurah_sandbox_user");
     setUser(null);
     setProfile(DEFAULT_GUEST_PROFILE);
     setHistory([]);
@@ -907,21 +980,6 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
-    const savedSandboxUser = localStorage.getItem("carimurah_sandbox_user");
-    if (savedSandboxUser) {
-      try {
-        const u = JSON.parse(savedSandboxUser);
-        setUser(u);
-        loadHistoryFromDB(u.uid);
-        getUserProfile(u.uid).then((p) => {
-          setProfile(p || { ...DEFAULT_GUEST_PROFILE, uid: u.uid, displayName: u.displayName || "User", email: u.email });
-        });
-        return; // skip Firebase listener if sandbox active
-      } catch (e) {
-        localStorage.removeItem("carimurah_sandbox_user");
-      }
-    }
-
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -1334,6 +1392,22 @@ export default function App() {
   const startCamera = async () => {
     setCameraError(null);
     setMode("camera");
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const check = await CapacitorCamera.checkPermissions();
+        if (check.camera !== "granted") {
+          const request = await CapacitorCamera.requestPermissions();
+          if (request.camera !== "granted") {
+            setCameraError("Izin kamera ditolak. Silakan berikan izin akses kamera di pengaturan sistem Android Anda.");
+            return;
+          }
+        }
+      } catch (nativeErr) {
+        console.warn("Capacitor native camera permission request error:", nativeErr);
+      }
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
@@ -1365,6 +1439,23 @@ export default function App() {
     setMode("qr_scanner");
     setQrScanningState("idle");
     setQrMatchedData(null);
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const check = await CapacitorCamera.checkPermissions();
+        if (check.camera !== "granted") {
+          const request = await CapacitorCamera.requestPermissions();
+          if (request.camera !== "granted") {
+            setCameraError("Izin kamera ditolak. Silakan berikan izin akses kamera di pengaturan sistem Android Anda.");
+            triggerToast("Gagal mengaktifkan kamera scanner karena izin ditolak.", "error");
+            return;
+          }
+        }
+      } catch (nativeErr) {
+        console.warn("Capacitor native QR camera permission request error:", nativeErr);
+      }
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
@@ -1640,6 +1731,21 @@ export default function App() {
   };
 
   const startRecording = async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const check = await VoiceRecorder.hasAudioRecordingPermission();
+        if (!check.value) {
+          const request = await VoiceRecorder.requestAudioRecordingPermission();
+          if (!request.value) {
+            triggerToast("Izin mikrofon ditolak. Silakan berikan izin akses mikrofon di pengaturan sistem Android Anda.", "error");
+            return;
+          }
+        }
+      } catch (nativeErr) {
+        console.warn("Capacitor native voice permission request error:", nativeErr);
+      }
+    }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -2099,7 +2205,60 @@ export default function App() {
 
                <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                     <h3 className="font-bold text-sm uppercase tracking-widest opacity-40">Riwayat Analisis Agen ({filteredHistory.length})</h3>
+                      {aggStats && (
+                        <div className={`p-6 rounded-[2.5rem] border-2 text-left space-y-4 mb-6 ${isB2B ? "bg-slate-900 border-white/5 text-white" : "bg-white border-slate-100 text-slate-850 shadow-xl shadow-slate-100/30"}`}>
+                          <div className="flex justify-between items-center">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-indigo-500">📊 MongoDB Atlas Aggregation Engine</span>
+                              <h4 className="text-xs font-black tracking-tight uppercase">Analisis Penghematan Real-Time</h4>
+                            </div>
+                            <button 
+                              onClick={() => setShowAggQuery(!showAggQuery)}
+                              className="py-1 px-2.5 text-[8px] font-black uppercase tracking-widest rounded-lg border border-indigo-500/20 text-indigo-500 hover:bg-indigo-500/5 transition-colors cursor-pointer"
+                            >
+                              {showAggQuery ? "Sembunyikan Query" : "Lihat Query Pipeline"}
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl flex flex-col justify-between">
+                              <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Total Penyelamatan</span>
+                              <span className="text-sm font-black text-emerald-500 mt-1">Rp{aggStats.totalSavings?.toLocaleString("id-ID") || 0}</span>
+                            </div>
+                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl flex flex-col justify-between">
+                              <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Rata-rata Hemat</span>
+                              <span className="text-sm font-black text-indigo-500 mt-1">Rp{aggStats.avgSavings?.toLocaleString("id-ID") || 0}</span>
+                            </div>
+                            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl flex flex-col justify-between">
+                              <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Koleksi Produk</span>
+                              <span className="text-sm font-black text-violet-500 mt-1">{aggStats.totalCached || 0} Entri</span>
+                            </div>
+                          </div>
+
+                          {showAggQuery && (
+                            <div className="p-4 bg-slate-950 text-slate-200 rounded-2xl border border-white/5 font-mono text-[10px] space-y-2.5">
+                              <span className="text-indigo-400 font-bold block">MongoDB Aggregate Pipeline:</span>
+                              <pre className="p-2.5 bg-black/40 rounded-xl overflow-x-auto max-h-44 minimal-scrollbar text-slate-300">
+{`db.collection("history").aggregate([
+  { $match: { userId: "${user?.uid || ""}" } },
+  {
+    $group: {
+      _id: "$userId",
+      totalSavings: { $sum: "$potentialSavings" },
+      avgSavings: { $avg: "$potentialSavings" },
+      totalCalculated: { $sum: 1 }
+    }
+  }
+])`}
+                              </pre>
+                              <p className="text-[9px] font-sans opacity-50 leading-relaxed italic">
+                                💡 Hasil group sums, group averages, dan caching stats ini dihitung secara real-time langsung di cluster database cloud MongoDB menggunakan multi-stage processing pipelines.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <h3 className="font-bold text-sm uppercase tracking-widest opacity-40">Riwayat Analisis Agen ({filteredHistory.length})</h3>
                      <div className="flex items-center gap-3">
                         {filteredHistory.length > 0 && (
                           <button 
@@ -2138,8 +2297,8 @@ export default function App() {
                          Mulai Pindai Sekarang
                       </button>
                     </div>
-                  ) : filteredHistory.map(item => (
-                    <div key={item.id} className="relative group">
+                  ) : filteredHistory.map((item, idx) => (
+                    <div key={`${item.id}-${idx}`} className="relative group">
                        <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
                           <button 
                             onClick={(e) => {
@@ -3003,9 +3162,9 @@ export default function App() {
                                     <span className="block text-[10px] opacity-70">Gunakan simulator scan di bawah untuk mencoba!</span>
                                   </div>
                                 ) : (
-                                  qrScannedHistory.map((item) => (
+                                  qrScannedHistory.map((item, idx) => (
                                     <div 
-                                      key={item.id} 
+                                      key={`${item.id}-${idx}`} 
                                       className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-white/20 transition-all space-y-2 relative"
                                     >
                                       <div className="flex justify-between items-start">
@@ -3341,15 +3500,156 @@ export default function App() {
                   value={manualText}
                   onChange={(e) => setManualText(e.target.value)}
                   placeholder="Contoh: Minyak Goreng Bimoli 2L, Beras Pandan Wangi 5kg..."
-                  className={`w-full h-48 p-6 rounded-[2rem] border-2 transition-all outline-none text-lg ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500" : "bg-slate-50 border-slate-100 focus:border-emerald-500 text-slate-900"}`}
+                  className={`w-full h-36 p-6 rounded-[2rem] border-2 transition-all outline-none text-lg ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500" : "bg-slate-50 border-slate-100 focus:border-emerald-500 text-slate-900"}`}
                 />
-                <button 
-                  onClick={() => processInput({ text: manualText })}
-                  disabled={!manualText || loading}
-                  className={`w-full py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 ${isB2B ? "bg-white text-slate-950 shadow-xl" : "bg-slate-900 text-white shadow-xl shadow-slate-200"}`}
-                >
-                  {loading ? <Loader2 className="animate-spin" /> : "Gaskeun Analisis AI"}
-                </button>
+
+                {/* ✅ 2 & 3. Search Engine Selectors */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest opacity-40 block text-left">Pilih Mesin Pencarian</span>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => { setSearchEngine("gemini"); setMongoSearchResults([]); }}
+                      className={`py-3 px-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all cursor-pointer ${searchEngine === "gemini" ? "bg-slate-900 border-slate-900 text-white" : "bg-transparent border-slate-100 dark:border-white/5 text-slate-400 hover:border-slate-300"}`}
+                    >
+                      🔹 Gemini AI Agen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSearchEngine("atlas"); setMongoSearchResults([]); }}
+                      className={`py-3 px-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all cursor-pointer ${searchEngine === "atlas" ? "bg-indigo-600 border-indigo-600 text-white font-black" : "bg-transparent border-slate-100 dark:border-white/5 text-slate-400 hover:border-indigo-500/20"}`}
+                    >
+                      ⚡ Atlas Search
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSearchEngine("vector"); setMongoSearchResults([]); }}
+                      className={`py-3 px-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all cursor-pointer ${searchEngine === "vector" ? "bg-violet-600 border-violet-600 text-white font-black" : "bg-transparent border-slate-100 dark:border-white/5 text-slate-400 hover:border-violet-500/20"}`}
+                    >
+                      🧠 Vector Search
+                    </button>
+                  </div>
+                  <p className="text-[9px] opacity-50 italic leading-relaxed text-left">
+                    {searchEngine === "gemini" && "🔹 Gemini AI Agen: Penjelajahan web real-time yang terhubung ke Google Search untuk mencari harga termurah di internet saat ini."}
+                    {searchEngine === "atlas" && "⚡ Atlas Search: Pencarian teks Lucene performa tinggi langsung ke koleksi database MongoDB Atlas dengan kecocokan indeks kata kunci."}
+                    {searchEngine === "vector" && "🧠 Vector Search: Mengonversi kata pencarian Anda ke 768-dimensi koordinat vektor menggunakan Gemini model, lalu melakukan pencarian kemiripan kosinus (Semantic Similarity)."}
+                  </p>
+                </div>
+
+                {searchEngine === "gemini" ? (
+                  <button 
+                    onClick={() => processInput({ text: manualText })}
+                    disabled={!manualText || loading}
+                    className={`w-full py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${isB2B ? "bg-white text-slate-950 shadow-xl" : "bg-slate-900 text-white shadow-xl shadow-slate-200"}`}
+                  >
+                    {loading ? <Loader2 className="animate-spin" /> : "Gaskeun Analisis AI"}
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => handleMongoSearch(searchEngine)}
+                    disabled={!manualText || mongoSearchLoading}
+                    className={`w-full py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer text-white shadow-xl ${searchEngine === "atlas" ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20" : "bg-violet-600 hover:bg-violet-700 shadow-violet-600/20"}`}
+                  >
+                    {mongoSearchLoading ? <Loader2 className="animate-spin text-white" /> : `Gaskeun ${searchEngine === "atlas" ? "Atlas Keyword" : "Vector Semantic"}`}
+                  </button>
+                )}
+
+                {/* Results & Developer diagnostics console */}
+                {mongoSearchLoading && (
+                  <div className="py-12 text-center space-y-3">
+                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-indigo-500" />
+                    <p className="text-xs font-black uppercase tracking-wider opacity-60">Querying Atlas Cloud Index...</p>
+                  </div>
+                )}
+
+                {mongoSearchResults.length > 0 && (
+                  <div className="space-y-6 pt-4 text-left">
+                    {/* Monospace Developer Diagnostic Console */}
+                    <div className="p-6 bg-slate-950 text-slate-200 rounded-[2rem] font-mono text-xs space-y-4 border border-white/5 shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 px-3 py-1.5 bg-indigo-500/10 border-b border-l border-white/5 text-[9px] font-black uppercase tracking-widest text-indigo-400">
+                        Console Trace
+                      </div>
+                      
+                      <div className="space-y-1">
+                        <span className="text-indigo-400 font-bold font-sans"># MONGO_ATLAS_QUERY_EXECUTION</span>
+                        <div className="flex gap-2 text-[10px] items-center pt-1 flex-wrap">
+                          <span className="px-2 py-0.5 bg-white/10 rounded text-slate-300 font-bold">{mongoSearchType}</span>
+                          <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded font-bold">200 OK</span>
+                          <span className="text-white/40">createdAt: {new Date().toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-slate-400 text-[10px]">Database Query Pipeline:</span>
+                        <pre className="p-3 bg-black/40 rounded-xl overflow-x-auto text-[10px] text-slate-300 max-h-40 minimal-scrollbar">
+                          {mongoPipelineLog}
+                        </pre>
+                      </div>
+
+                      <div className="space-y-1 text-slate-300 text-[10px] bg-slate-900/40 p-3 rounded-xl border border-white/5 flex gap-2 items-start leading-relaxed">
+                        <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                        <span>{mongoDiagnosticLog}</span>
+                      </div>
+                    </div>
+
+                    {/* Main Product Cards retrieved from Atlas */}
+                    <div className="space-y-4">
+                      <h4 className="font-black text-xs uppercase tracking-widest opacity-40">Daftar Produk Terkait di Katalog</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {mongoSearchResults.map((prod, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`p-6 rounded-[2rem] border-2 relative flex flex-col justify-between ${isB2B ? "bg-white/5 border-white/5 text-white" : "bg-white border-slate-100 text-slate-900 shadow-xl shadow-slate-100/50"}`}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between gap-1 mb-2.5">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-indigo-500">{prod.category}</span>
+                                <div className="flex items-center gap-1">
+                                  <Star className="w-3.5 h-3.5 fill-current text-amber-400" />
+                                  <span className="text-[10px] font-bold opacity-60">{prod.rating}</span>
+                                </div>
+                              </div>
+                              <h5 className="font-black text-md leading-tight mb-2">{prod.productName}</h5>
+                              <p className="text-xs opacity-60 line-clamp-2 leading-relaxed mb-4">{prod.description}</p>
+                              
+                              <div className="flex flex-wrap gap-1 mb-5">
+                                {prod.features?.map((ft: string, iIndex: number) => (
+                                  <span key={iIndex} className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 dark:bg-white/5 opacity-80">{ft}</span>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="border-t border-dashed border-slate-100 dark:border-white/5 pt-4 space-y-3">
+                              <div className="flex justify-between items-end">
+                                <div>
+                                  <span className="text-[8px] font-black uppercase opacity-40 block">Harga Terendah</span>
+                                  <span className="text-md font-black text-indigo-500">Rp{prod.recommendedPrice?.toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[8px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-lg">Hemat Rp{prod.saving?.toLocaleString("id-ID")}</span>
+                                  <span className="text-[8px] font-black opacity-30 block mt-1">Asal: {prod.platform}</span>
+                                </div>
+                              </div>
+
+                              <div className="p-2.5 bg-slate-50 dark:bg-white/5 rounded-xl text-[9px] font-bold opacity-75">
+                                🎁 <span className="font-extrabold text-indigo-500">Diskon Grosir:</span> {prod.bulkDiscount}
+                              </div>
+
+                              <a 
+                                href={prod.url} 
+                                target="_blank" 
+                                referrerPolicy="no-referrer"
+                                className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1 transition-colors"
+                              >
+                                Hubungi Supplier / Beli
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
             </motion.section>
           ) : mode === "voice" ? (
              <motion.section key="voice" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-10 text-center">
@@ -4348,9 +4648,10 @@ export default function App() {
                             })
                             .map((item, i) => (
                             <button 
-                              key={i} 
+                              key={`analysis-item-${item.productName}-${i}`} 
                               onClick={() => {
-                                setSelectedItemIndex(i);
+                                const origIdx = analysis.batchResult?.items.indexOf(item);
+                                setSelectedItemIndex(origIdx !== undefined && origIdx !== -1 ? origIdx : i);
                                 setMode("compare");
                               }}
                               className={`w-full p-8 rounded-[2.5rem] border-2 text-left transition-all hover:scale-[1.02] relative ${isB2B ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-xl shadow-slate-100/50"}`}
@@ -4517,6 +4818,7 @@ export default function App() {
       <AnimatePresence>
         {showOnboarding && (
           <motion.div 
+            key="onboarding-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -4598,6 +4900,7 @@ export default function App() {
 
         {showSandboxLogin && (
           <motion.div 
+            key="sandbox-login-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -4609,19 +4912,56 @@ export default function App() {
               exit={{ scale: 0.95, y: 20 }}
               className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-left space-y-6`}
             >
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500 mb-2">
-                    Login Mode (LocalStorage Connected)
-                  </div>
-                  <h3 className="text-2xl font-black tracking-tight dialog-title">Login CariMurah</h3>
-                  <p className="text-xs opacity-60 leading-relaxed">
-                    Masuk sebagai tamu untuk menyimpan data hanya di lokal (tidak disarankan untuk penggunaan jangka panjang). Gunakan aplikasi CariMurah agar bisa login menggunakan email dan langsung tersambung ke database.
-                  </p>
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 text-indigo-500">
+                  ⚡ MongoDB Atlas Cloud Authentication
                 </div>
+                <h3 className="text-2xl font-black tracking-tight">Akses CariMurah</h3>
+                <p className="text-xs opacity-60 leading-relaxed">
+                  Gabung dengan ribuan bisnis & reseller yang menghemat biaya operasional belanja retail & wholesale hingga 30% menggunakan integrasi database MongoDB.
+                </p>
               </div>
 
+              {/* Login / Register tabs switcher */}
+              <div className="flex border-b border-slate-100 dark:border-white/10">
+                <button
+                  type="button"
+                  onClick={() => { setMongoAuthTab("login"); setMongoAuthError(null); }}
+                  className={`flex-1 pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer ${mongoAuthTab === "login" ? "border-indigo-500 text-indigo-500" : "border-transparent opacity-40 hover:opacity-85"}`}
+                >
+                  Masuk Akun
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMongoAuthTab("register"); setMongoAuthError(null); }}
+                  className={`flex-1 pb-3 text-xs font-black uppercase tracking-wider transition-all border-b-2 cursor-pointer ${mongoAuthTab === "register" ? "border-indigo-500 text-indigo-500" : "border-transparent opacity-40 hover:opacity-85"}`}
+                >
+                  Daftar Baru
+                </button>
+              </div>
+
+              {mongoAuthError && (
+                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-xs font-bold text-rose-500 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{mongoAuthError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleSandboxLoginSubmit} className="space-y-4">
+                {mongoAuthTab === "register" && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Nama Lengkap Anda</label>
+                    <input 
+                      type="text" 
+                      value={sandboxName}
+                      onChange={(e) => setSandboxName(e.target.value)}
+                      required
+                      placeholder="Contoh: Khudri"
+                      className={`w-full px-4 py-3 rounded-xl font-bold text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isB2B ? "bg-white/5 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-900"}`}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Alamat Email Anda</label>
                   <input 
@@ -4635,13 +4975,13 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Nama Lengkap</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest opacity-40">Password Secure</label>
                   <input 
-                    type="text" 
-                    value={sandboxName}
-                    onChange={(e) => setSandboxName(e.target.value)}
+                    type="password" 
+                    value={mongoPassword}
+                    onChange={(e) => setMongoPassword(e.target.value)}
                     required
-                    placeholder="Contoh: Khudri"
+                    placeholder="Minimal 6 karakter"
                     className={`w-full px-4 py-3 rounded-xl font-bold text-sm border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${isB2B ? "bg-white/5 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-900"}`}
                   />
                 </div>
@@ -4650,15 +4990,23 @@ export default function App() {
                   <button 
                     type="button"
                     onClick={() => setShowSandboxLogin(false)}
-                    className={`py-3.5 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 hover:bg-white/10" : "bg-slate-100 hover:bg-slate-200"}`}
+                    className={`py-3.5 rounded-2xl font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer ${isB2B ? "bg-white/5 hover:bg-white/10 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-800"}`}
                   >
                     Batal
                   </button>
                   <button 
                     type="submit"
-                    className="py-3.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-indigo-500/20"
+                    disabled={mongoAuthLoading}
+                    className="py-3.5 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    Masuk
+                    {mongoAuthLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Memproses...</span>
+                      </>
+                    ) : (
+                      <span>{mongoAuthTab === "login" ? "Masuk" : "Daftar Akun"}</span>
+                    )}
                   </button>
                 </div>
               </form>
@@ -4668,6 +5016,7 @@ export default function App() {
 
         {showDeleteConfirm && (
           <motion.div 
+            key="delete-confirm-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -4708,6 +5057,7 @@ export default function App() {
         {/* MANUAL QUICK ADD MODAL */}
         {showQuickAddModal && (
           <motion.div 
+            key="quick-add-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -4812,6 +5162,7 @@ export default function App() {
 
         {showQuotaLimitModal && (
           <motion.div 
+            key="quota-limit-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -4954,6 +5305,7 @@ export default function App() {
         {/* 2. DAZZLING INTERACTIVE PAYMENT GATEWAY SIMULATOR MODAL */}
         {showPaymentModal && paymentPlan && (
           <motion.div 
+            key="payment-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -5283,6 +5635,7 @@ export default function App() {
         {/* 3. EXCLUSIVE INTERACTIVE AFFILIATE REDIRECTION MODAL */}
         {showAffiliateModal && selectedAffiliateItem && (
           <motion.div 
+            key="affiliate-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

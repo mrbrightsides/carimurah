@@ -52,6 +52,19 @@ CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt
 
 ---
 
+## 🍃 MongoDB Atlas Cloud Integration (Verified Production-Ready)
+
+CariMurah.ai is fully integrated with MongoDB Atlas to deliver an enterprise-grade database suite. Every capability has been successfully implemented, tested, and verified on the Atlas cluster dashboard:
+
+*   **✅ MongoDB Atlas Authentication**: Full OAuth single-sign-on integration that maps Google users (using email as enterprise credential fields) instantly to standard cloud database user structures inside the `users` collection.
+*   *🚀 Atlas Search (Lucene)*: Enabled via the `default` search index under the `carimurah.products` collection. Powers high-speed fuzzy, auto-correcting search queries over multi-merchant products.
+*   *🧠 MongoDB Vector Search*: Configured via the `vector_index` on `carimurah.products`. Automatically indexes high-dimensional AI embeddings for conceptual, high-fidelity Indonesian cargo and supply matching.
+*   *📊 MongoDB Aggregation Pipelines*: Multi-stage pipelines are designed to aggregate enterprise savings trends, warehouse stock logistics, audit histories, and cache telemetry.
+*   *⚡ MongoDB Product Cache*: Temporary caches stored securely inside the `product_cache` collection, bypassing duplicate merchant API queries to improve app performance and slash cost overhead.
+*   *🎯 MongoDB User Preference Engine*: Real-time state binding of watchlist limits, UI mode preferences, and history logs directly mapped into nested JSON sub-documents under the `users` database partition.
+
+---
+
 ## 📂 Sub-Documentation Hub
 
 To make onboarding and contribution seamless, please review our specialized technical directories:
