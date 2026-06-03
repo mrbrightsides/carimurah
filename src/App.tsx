@@ -464,6 +464,12 @@ export default function App() {
   const [paymentLog, setPaymentLog] = useState<string[]>([]);
 
   useEffect(() => {
+    if (typeof pendo !== 'undefined' && typeof pendo.pageLoad === 'function') {
+      pendo.pageLoad();
+    }
+  }, []);
+
+  useEffect(() => {
     const shown = localStorage.getItem("carimurah_onboarding_shown");
     if (!shown) {
       setShowOnboarding(true);
@@ -4850,18 +4856,23 @@ export default function App() {
       {/* Bulk Delete Confirmation Modal */}
       <AnimatePresence>
         {showOnboarding && (
-          <motion.div 
+          <motion.div
             key="onboarding-modal-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/95 backdrop-blur-md"
+            onClick={() => {
+              localStorage.setItem('carimurah_onboarding_shown', 'true');
+              setShowOnboarding(false);
+            }}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, y: 30 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 30 }}
               className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl text-left space-y-6 max-h-[90vh] overflow-y-auto minimal-scrollbar`}
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
