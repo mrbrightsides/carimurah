@@ -428,6 +428,52 @@ export default function App() {
   
   // Affiliate & Sponsored Action Modal States
   const [showAffiliateModal, setShowAffiliateModal] = useState(false);
+
+  // AI Agent Automated Checkout States
+  const [showAgentCheckoutModal, setShowAgentCheckoutModal] = useState(false);
+  const [agentCheckoutStep, setAgentCheckoutStep] = useState<"ready" | "processing" | "success">("ready");
+  const [agentCheckoutLogs, setAgentCheckoutLogs] = useState<string[]>([]);
+  const [currentLogIndex, setCurrentLogIndex] = useState(0);
+
+  const startAgentCheckout = () => {
+    setShowAgentCheckoutModal(true);
+    setAgentCheckoutStep("ready");
+    setAgentCheckoutLogs([
+      "🤖 [CariMurah Agent] Memulai sesi checkout rahasia otonom...",
+      "🔍 [CariMurah Agent] Memindai opsi toko di database untuk rasio harga termurah...",
+      "🔐 [CariMurah Agent] Sinkronisasi data pembeli via CariMurah secure proxy...",
+      "🎟️ [CariMurah Agent] Mencari & menerapkan voucher diskon promo platform...",
+      "📦 [CariMurah Agent] Mengajukan asuransi cargo dan rute kargo logistik terdekat...",
+      "💳 [CariMurah Agent] Memverifikasi pembayaran aman via CariMurah otonom gateway...",
+      "🎉 [CariMurah Agent] Selesai! Pesanan berhasil dicheckout otomatis via gerbang otonom!"
+    ]);
+    setCurrentLogIndex(0);
+  };
+
+  const runCheckoutSimulation = () => {
+    setAgentCheckoutStep("processing");
+    setCurrentLogIndex(0);
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (agentCheckoutStep === "processing") {
+      interval = setInterval(() => {
+        setCurrentLogIndex((prevIndex) => {
+          if (prevIndex < agentCheckoutLogs.length - 1) {
+            return prevIndex + 1;
+          } else {
+            clearInterval(interval);
+            setTimeout(() => {
+              setAgentCheckoutStep("success");
+            }, 800);
+            return prevIndex;
+          }
+        });
+      }, 1200);
+    }
+    return () => clearInterval(interval);
+  }, [agentCheckoutStep, agentCheckoutLogs]);
   
   // Global trigger access for console or debug
   useEffect(() => {
@@ -4751,7 +4797,7 @@ export default function App() {
                                   </div>
                                </div>
 
-                               <div className="flex items-center justify-between gap-6 border-t border-dashed pt-6 mt-2 opacity-100">
+                               <div className="flex items-center justify-between gap-2 sm:gap-6 border-t border-dashed pt-6 mt-2 opacity-100">
                                   <div>
                                      {item.forecasting?.history && (
                                        <button 
@@ -4765,10 +4811,10 @@ export default function App() {
                                        </button>
                                      )}
                                      <span className="block text-[10px] opacity-40 font-black uppercase tracking-widest mb-1">{item.platform}</span>
-                                     <div className="text-3xl font-black tracking-tight">Rp{item.recommendedPrice.toLocaleString("id-ID")}</div>
+                                     <div className="text-2xl sm:text-3xl font-black tracking-tight">Rp{item.recommendedPrice.toLocaleString("id-ID")}</div>
                                   </div>
-                                  <div className={`px-8 py-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 shadow-lg transition-transform active:scale-95 ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-slate-900 text-white shadow-slate-900/20"}`}>
-                                    Bandingkan <ChevronRight className="w-4 h-4" />
+                                  <div className={`px-3 py-2 sm:px-6 sm:py-3.5 md:px-8 md:py-5 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs md:text-sm uppercase tracking-widest flex items-center gap-1 sm:gap-3 shrink-0 shadow-lg transition-transform active:scale-95 ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-slate-900 text-white shadow-slate-900/20"}`}>
+                                    Bandingkan <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   </div>
                                </div>
 
@@ -4820,8 +4866,11 @@ export default function App() {
                        </div>
                     </div>
 
-                    <button className={`w-full py-6 rounded-[2rem] font-black text-sm uppercase tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all shadow-2xl ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-slate-900 text-white shadow-slate-900/20"}`}>
-                       Checkout Otomatis Lewat Agen <Sparkles className="w-5 h-5" />
+                    <button 
+                      onClick={startAgentCheckout}
+                      className={`w-full py-6 rounded-[2rem] font-black text-sm uppercase tracking-widest flex items-center justify-center gap-4 active:scale-95 transition-all shadow-2xl cursor-pointer ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-slate-900 text-white shadow-slate-900/20"}`}
+                    >
+                       Checkout Otomatis Lewat Agen <Sparkles className="w-5 h-5 animate-pulse" />
                     </button>
                  </motion.div>
                )}
@@ -5769,6 +5818,173 @@ export default function App() {
                     </button>
                   </div>
                 </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* 4. EXCLUSIVE AI AGENT AUTOMATED CHECKOUT SIMULATOR */}
+        {showAgentCheckoutModal && analysis?.batchResult && (
+          <motion.div 
+            key="agent-checkout-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 30 }}
+              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 text-left relative overflow-hidden`}
+            >
+              {/* Glow accent */}
+              <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex justify-between items-start border-b border-dashed pb-4">
+                <div className="space-y-1">
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isB2B ? "bg-indigo-500/20 text-indigo-400" : "bg-emerald-500/10 text-emerald-500"}`}>
+                     CariMurah AI Otonom Agent
+                  </span>
+                  <h3 className="text-2xl font-black tracking-tight">Checkout Agen Otomatis</h3>
+                  <p className="text-xs opacity-60">Agen pintar kami akan mengisi keranjang & checkout otomatis.</p>
+                </div>
+                <button 
+                  onClick={() => setShowAgentCheckoutModal(false)}
+                  className={`p-2 rounded-full cursor-pointer transition-colors ${isB2B ? "bg-white/5 hover:bg-white/10" : "bg-slate-100 hover:bg-slate-200"}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {agentCheckoutStep === "ready" && (
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                     <h4 className="text-xs font-black uppercase tracking-widest opacity-45">Daftar Barang Checkout</h4>
+                     <div className="max-h-48 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                       {analysis.batchResult.items.map((prod, idx) => (
+                         <div key={idx} className={`p-3 rounded-2xl border flex justify-between items-center text-xs ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                            <div className="min-w-0 flex-1">
+                              <span className="block font-black truncate">{prod.productName}</span>
+                              <span className="text-[10px] opacity-55">{prod.brand} • via {prod.platform}</span>
+                            </div>
+                            <div className="text-right ml-4 shrink-0 font-bold">
+                              Rp{prod.recommendedPrice.toLocaleString("id-ID")}
+                            </div>
+                         </div>
+                       ))}
+                     </div>
+                  </div>
+
+                  <div className={`p-5 rounded-3xl border ${isB2B ? "bg-indigo-500/5 border-indigo-500/15" : "bg-slate-50 border-slate-150"} flex justify-between items-center`}>
+                    <div>
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-50">Estimasi Total Pemasukan</span>
+                      <span className="text-sm font-black font-mono text-emerald-500">
+                        Rp{analysis.batchResult.items.reduce((sum, item) => sum + item.recommendedPrice, 0).toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[8px] font-black uppercase tracking-widest opacity-50">Potensi Hemat Belanja</span>
+                      <span className={`text-sm font-black font-mono ${isB2B ? "text-indigo-400" : "text-emerald-500"}`}>
+                        Rp{analysis.batchResult.items.reduce((sum, item) => sum + item.saving, 0).toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 leading-relaxed flex items-start gap-2.5">
+                     <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+                     <span><strong>Optimasi Auto-Voucher:</strong> Agen CariMurah akan otomatis menyisipkan kode promo, potongan ongkos kirim, dan koin afiliasi untuk meminimalkan pengeluaran Anda.</span>
+                  </div>
+
+                  <button 
+                    onClick={runCheckoutSimulation}
+                    className={`w-full py-4.5 font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl flex items-center justify-center gap-3 transition-all active:scale-95 cursor-pointer ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20 hover:bg-indigo-600" : "bg-slate-900 text-white shadow-slate-900/10 hover:bg-slate-850"}`}
+                  >
+                     Mulai Checkout Otomatis <Sparkles className="w-4 h-4 animate-spin" />
+                  </button>
+                </div>
+              )}
+
+              {agentCheckoutStep === "processing" && (
+                <div className="space-y-6">
+                  <div className="py-2 text-center space-y-3">
+                     <Loader2 className={`w-10 h-10 animate-spin mx-auto ${isB2B ? "text-indigo-400" : "text-emerald-500"}`} />
+                     <h4 className="text-base font-black">Agen Sedang Mengeksekusi Belanja...</h4>
+                     <p className="text-xs opacity-60">Menerapkan bot penemu diskon & broker transaksi.</p>
+                  </div>
+
+                  {/* Terminal log simulation */}
+                  <div className="bg-slate-950 rounded-[2rem] p-6 font-mono text-[10px] text-emerald-400 border border-white/5 shadow-inner space-y-2.5 max-h-60 overflow-y-auto scrollbar-none">
+                     {agentCheckoutLogs.slice(0, currentLogIndex + 1).map((log, lidx) => (
+                       <motion.div 
+                         key={lidx}
+                         initial={{ opacity: 0, x: -5 }}
+                         animate={{ opacity: 1, x: 0 }}
+                         transition={{ duration: 0.3 }}
+                         className="flex items-start gap-2"
+                       >
+                         <span className="text-emerald-500 leading-relaxed shrink-0 select-none">&gt;</span>
+                         <span className="leading-relaxed text-balance">{log}</span>
+                       </motion.div>
+                     ))}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                     <motion.div 
+                       className={`h-full ${isB2B ? "bg-indigo-500" : "bg-emerald-500"}`}
+                       initial={{ width: "0%" }}
+                       animate={{ width: `${((currentLogIndex + 1) / agentCheckoutLogs.length) * 100}%` }}
+                       transition={{ duration: 0.5 }}
+                     />
+                  </div>
+                </div>
+              )}
+
+              {agentCheckoutStep === "success" && (
+                <div className="py-6 text-center space-y-6">
+                  <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-xl font-bold animate-bounce">
+                     <CheckCircle2 className="w-12 h-12" />
+                  </div>
+
+                  <div className="space-y-2">
+                     <h3 className="text-2xl font-black">Checkout Otonom Berhasil!</h3>
+                     <p className="text-xs opacity-60 leading-relaxed max-w-sm mx-auto">
+                        Semua barang dalam daftar telah berhasil dipesan dan didelegasikan secara aman melalui agen pintar CariMurah. Pembayaran telah diamankan, dan resi akan dikirim ke WhatsApp/Email Anda segera.
+                     </p>
+                  </div>
+
+                  <div className={`p-5 rounded-3xl border text-left space-y-3 ${isB2B ? "bg-white/5 border-white/5" : "bg-slate-50 border-slate-100"}`}>
+                     <div className="flex justify-between items-center text-xs">
+                        <span className="opacity-50 font-medium">Nomor Resi / Pesanan</span>
+                        <span className="font-mono font-black text-emerald-500">CM-AUT-{Math.floor(100000 + Math.random() * 900000)}</span>
+                     </div>
+                     <div className="flex justify-between items-center text-xs border-t border-dashed border-white/10 pt-3">
+                        <span className="opacity-50 font-medium">Metode Ekspedisi Agen</span>
+                        <span className="font-semibold">Cargo Express Kemitraan</span>
+                     </div>
+                     <div className="flex justify-between items-center text-xs border-t border-dashed border-white/10 pt-3">
+                        <span className="opacity-50 font-medium">Reward Cashback Kuota</span>
+                        <span className="text-emerald-500 font-mono font-black">+3 Token Scan Bonus!</span>
+                     </div>
+                  </div>
+
+                  <button 
+                    onClick={() => {
+                      setShowAgentCheckoutModal(false);
+                      // Award the user 3 extra scan credits as a loyalty simulation reward!
+                      setExtraCredits(prev => {
+                        const nextVal = prev + 3;
+                        localStorage.setItem("carimurah_extra_credits", nextVal.toString());
+                        return nextVal;
+                      });
+                      triggerToast("Sukses! Anda mendapat +3 Kredit Scan bonus untuk mencoba!", "success");
+                    }}
+                    className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 cursor-pointer ${isB2B ? "bg-indigo-500 text-white hover:bg-indigo-600" : "bg-slate-900 text-white hover:bg-slate-850"}`}
+                  >
+                     Verifikasi & Selesai
+                  </button>
+                </div>
               )}
             </motion.div>
           </motion.div>
