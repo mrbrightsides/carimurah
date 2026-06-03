@@ -1214,7 +1214,11 @@ app.post("/api/tts", async (req, res) => {
     }
   } catch (error: any) {
     console.error("TTS Error:", error);
-    res.status(500).json({ error: error.message });
+    let message = error.message || "No audio data returned";
+    if (message.includes("prepayment credits") || message.includes("RESOURCE_EXHAUSTED") || message.includes("credits are depleted") || message.includes("429")) {
+      message = "Kredit prabayar Google AI Studio habis. Gagal memutar suara Zephyr.";
+    }
+    res.status(500).json({ error: message });
   }
 });
 
@@ -1470,7 +1474,11 @@ app.post("/api/process", async (req, res) => {
     res.json(result);
   } catch (error: any) {
     console.error("Processing error:", error);
-    res.status(500).json({ error: error.message || "Terjadi kesalahan internal pada agen." });
+    let message = error.message || "Terjadi kesalahan internal pada agen.";
+    if (message.includes("prepayment credits") || message.includes("RESOURCE_EXHAUSTED") || message.includes("credits are depleted") || message.includes("429")) {
+      message = "Maaf, saldo kredit prabayar (prepayment credits) Gemini API Anda di Google AI Studio telah habis (RESOURCE_EXHAUSTED).\n\nSilakan lakukan top-up saldo atau periksa pengaturan billing Anda di dashboard Google AI Studio: https://ai.studio/projects";
+    }
+    res.status(500).json({ error: message });
   }
 });
 
@@ -1510,7 +1518,11 @@ app.post("/api/monthly-summary", async (req, res) => {
     res.json({ report: response.text });
   } catch (error: any) {
     console.error("Summary error:", error);
-    res.status(500).json({ error: error.message || "Gagal membuat ringkasan bulanan." });
+    let message = error.message || "Gagal membuat ringkasan bulanan.";
+    if (message.includes("prepayment credits") || message.includes("RESOURCE_EXHAUSTED") || message.includes("credits are depleted") || message.includes("429")) {
+      message = "Maaf, saldo kredit prabayar (prepayment credits) Gemini API Anda di Google AI Studio telah habis (RESOURCE_EXHAUSTED).\n\nSilakan top-up saldo di Google AI Studio: https://ai.studio/projects";
+    }
+    res.status(500).json({ error: message });
   }
 });
 
@@ -1764,7 +1776,11 @@ ATURAN PERILAKU:
 
   } catch (error: any) {
     console.error("Agent Chat API error:", error);
-    res.status(500).json({ error: error.message || "Gagal berinteraksi dengan asisten AI." });
+    let message = error.message || "Gagal berinteraksi dengan asisten AI.";
+    if (message.includes("prepayment credits") || message.includes("RESOURCE_EXHAUSTED") || message.includes("credits are depleted") || message.includes("429")) {
+      message = "Maaf, saldo kredit prabayar (prepayment credits) Gemini API Anda di Google AI Studio telah habis (RESOURCE_EXHAUSTED).\n\nSilakan top-up saldo di Google AI Studio jika ingin berinteraksi dengan asisten AI: https://ai.studio/projects";
+    }
+    res.status(500).json({ error: message });
   }
 });
 

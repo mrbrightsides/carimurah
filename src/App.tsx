@@ -341,6 +341,7 @@ export default function App() {
   const [qrFeedbackReason, setQrFeedbackReason] = useState<"failed" | "incorrect" | "other">("failed");
   const [qrFeedbackDetails, setQrFeedbackDetails] = useState("");
   const [showQrHelpModal, setShowQrHelpModal] = useState(false);
+  const [isDemoSheetMinimized, setIsDemoSheetMinimized] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [profileState, setProfileState] = useState<UserProfile | null>(DEFAULT_GUEST_PROFILE);
   const profile = useMemo(() => {
@@ -1439,6 +1440,7 @@ export default function App() {
     setMode("qr_scanner");
     setQrScanningState("idle");
     setQrMatchedData(null);
+    setIsDemoSheetMinimized(true);
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -3067,60 +3069,91 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Floating bottom AR hub triggers sheet */}
-                      <div className="absolute bottom-0 inset-x-0 z-30 bg-slate-950/90 backdrop-blur-md border-t border-white/10 rounded-t-[3rem] p-8 text-white space-y-6">
-                        <div className="flex justify-between items-center">
-                          <div className="space-y-1">
-                            <h4 className="text-base font-black tracking-tight" id="demo-subheading">Simulasi Pindai Instan (Demo)</h4>
-                            <p className="text-[10px] text-slate-400">Klik mitra grosir di bawah untuk simulasi scan instan berhadiah database RFQ:</p>
+                      {/* Floating bottom AR hub triggers sheet (Collapsible) */}
+                      <div 
+                        className={`absolute bottom-0 inset-x-0 z-30 bg-slate-950/95 backdrop-blur-md border-t border-white/10 rounded-t-[3rem] text-white transition-all duration-300 ease-in-out select-none ${
+                          isDemoSheetMinimized 
+                            ? "h-[70px] p-5 flex items-center justify-between cursor-pointer hover:bg-slate-900" 
+                            : "p-8 space-y-6 max-h-[85vh] overflow-y-auto"
+                        }`}
+                        onClick={isDemoSheetMinimized ? () => setIsDemoSheetMinimized(false) : undefined}
+                      >
+                        {isDemoSheetMinimized ? (
+                          <div className="w-full flex justify-between items-center px-1">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                              <span className="text-xs font-black tracking-wide">Buka Hub Simulasi Pindaian (Demo) 🛠️</span>
+                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 transition-all">
+                              Simulasi ↗
+                            </span>
                           </div>
-                          <span className="text-[10px] font-mono text-amber-500 animate-pulse font-black">● LIVE SCANNER</span>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="flex justify-between items-center">
+                              <div className="space-y-1">
+                                <h4 className="text-base font-black tracking-tight" id="demo-subheading">Simulasi Pindai Instan (Demo)</h4>
+                                <p className="text-[10px] text-slate-400">Klik mitra grosir di bawah untuk simulasi scan instan berhadiah database RFQ:</p>
+                              </div>
+                              <button 
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setIsDemoSheetMinimized(true); }}
+                                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 active:scale-95 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg cursor-pointer border border-white/10"
+                              >
+                                Sembunyikan ↘
+                              </button>
+                            </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <button 
-                            id="scan-demo-sup1-btn"
-                            type="button"
-                            onClick={() => handleSimulatedQrScan("SUP-7719")}
-                            className="p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-indigo-500/30 text-left transition-all flex items-center gap-4 cursor-pointer group active:scale-95"
-                          >
-                            <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-xl flex items-center justify-center text-lg font-black shadow-inner shadow-black shrink-0">
-                              SUP1
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <strong className="block text-xs font-black truncate group-hover:text-indigo-400 transition-colors">CV Sahabat Sembako</strong>
-                              <span className="block text-[9px] font-mono text-slate-400 mt-0.5 font-semibold">Supplier Minyak & Tepung Karawang</span>
-                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded mt-1.5 font-bold">Diskon Grosir 12%</span>
-                            </div>
-                          </button>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <button 
+                                id="scan-demo-sup1-btn"
+                                type="button"
+                                onClick={() => handleSimulatedQrScan("SUP-7719")}
+                                className="p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-indigo-500/30 text-left transition-all flex items-center gap-4 cursor-pointer group active:scale-95"
+                              >
+                                <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-xl flex items-center justify-center text-lg font-black shadow-inner shadow-black shrink-0">
+                                  SUP1
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <strong className="block text-xs font-black truncate group-hover:text-indigo-400 transition-colors">CV Sahabat Sembako</strong>
+                                  <span className="block text-[9px] font-mono text-slate-400 mt-0.5 font-semibold">Supplier Minyak & Tepung Karawang</span>
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-black text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded mt-1.5 font-bold">Diskon Grosir 12%</span>
+                                </div>
+                              </button>
 
-                          <button 
-                            id="scan-demo-sup2-btn"
-                            type="button"
-                            onClick={() => handleSimulatedQrScan("SUP-0921")}
-                            className="p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-amber-500/30 text-left transition-all flex items-center gap-4 cursor-pointer group active:scale-95"
-                          >
-                            <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center text-lg font-black shadow-inner shadow-black shrink-0">
-                              SUP2
+                              <button 
+                                id="scan-demo-sup2-btn"
+                                type="button"
+                                onClick={() => handleSimulatedQrScan("SUP-0921")}
+                                className="p-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-amber-500/30 text-left transition-all flex items-center gap-4 cursor-pointer group active:scale-95"
+                              >
+                                <div className="w-12 h-12 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center text-lg font-black shadow-inner shadow-black shrink-0">
+                                  SUP2
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <strong className="block text-xs font-black truncate group-hover:text-amber-400 transition-colors">Gudang Sembako Karawang</strong>
+                                  <span className="block text-[9px] font-mono text-slate-400 mt-0.5 font-semibold">Direct Padi Mill & Beras Premium</span>
+                                  <span className="inline-flex items-center gap-1 text-[8px] font-black text-indigo-400 uppercase tracking-wider bg-indigo-500/10 px-1.5 py-0.5 rounded mt-1.5 font-bold">Katalog Terbuka</span>
+                                </div>
+                              </button>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <strong className="block text-xs font-black truncate group-hover:text-amber-400 transition-colors">Gudang Sembako Karawang</strong>
-                              <span className="block text-[9px] font-mono text-slate-400 mt-0.5 font-semibold">Direct Padi Mill & Beras Premium</span>
-                              <span className="inline-flex items-center gap-1 text-[8px] font-black text-indigo-400 uppercase tracking-wider bg-indigo-500/10 px-1.5 py-0.5 rounded mt-1.5 font-bold">Katalog Terbuka</span>
-                            </div>
-                          </button>
-                        </div>
 
-                        <p className="text-[9px] text-center text-slate-500 font-mono">
-                          Menyokong pemindaian QR Code model ISO/IEC 18004. Hubungi administrator di setting jika tautan terputus.
-                        </p>
+                            <p className="text-[9px] text-center text-slate-500 font-mono">
+                              Menyokong pemindaian QR Code model ISO/IEC 18004. Hubungi administrator di setting jika tautan terputus.
+                            </p>
+                          </>
+                        )}
                       </div>
 
-                      {/* Floating Feedback FAB */}
+                      {/* Floating Feedback FAB with Dynamic Positioning */}
                       <button
                         type="button"
                         onClick={() => setShowQrFeedbackModal(true)}
-                        className="absolute right-6 bottom-[360px] sm:bottom-[240px] z-[50] px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-full shadow-lg shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer border border-rose-500/25 transition-all pointer-events-auto animate-pulse"
+                        className={`absolute right-6 z-[50] px-3.5 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-full shadow-lg shadow-rose-600/20 flex items-center gap-1.5 cursor-pointer border border-rose-500/25 transition-all duration-300 pointer-events-auto animate-pulse ${
+                          isDemoSheetMinimized 
+                            ? "bottom-[90px]" 
+                            : "bottom-[380px] sm:bottom-[260px]"
+                        }`}
                       >
                         <AlertTriangle className="w-4 h-4" />
                         <span className="text-[10px] font-black uppercase tracking-wider">Lapor Gagal/Salah</span>
@@ -3779,32 +3812,32 @@ export default function App() {
                 {/* Preset Prompt Recommendations */}
                 <div className="space-y-2 border-t border-slate-100 dark:border-white/10 pt-4">
                   <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Rekomendasi Pintar (Autonomous MCP Tools)</span>
-                  <div className="flex flex-wrap gap-2 overflow-x-auto pb-2 -mx-2 px-2">
+                  <div className="flex flex-nowrap gap-2 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory scrollbar-none">
                     <button 
                       onClick={() => sendChatMessage("Ambil profil data preferensi saya dari database MongoDB")}
                       disabled={chatLoading}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
                       📁 Ambil Profil DB
                     </button>
                     <button 
                       onClick={() => sendChatMessage("Cari harga termurah produk minyak goreng Bimoli 2 liter")}
                       disabled={chatLoading}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
                       🔍 Cari Minyak Murah
                     </button>
                     <button 
                       onClick={() => sendChatMessage("Tampilkan riwayat belanja & penghematan uang saya")}
                       disabled={chatLoading}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
                       📊 Scan Riwayat Penyelamatan
                     </button>
                     <button 
                       onClick={() => sendChatMessage("Ubah preferensi fokus B2B saya ke pengiriman tercepat")}
                       disabled={chatLoading}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
                       ⚙️ Update Preferensi Belanja
                     </button>
@@ -3812,7 +3845,7 @@ export default function App() {
                 </div>
 
                 {/* Input Area */}
-                <div className="flex gap-3">
+                <div className="flex gap-2 sm:gap-3 w-full">
                   <input 
                     type="text"
                     value={chatInput}
@@ -3823,13 +3856,13 @@ export default function App() {
                       }
                     }}
                     disabled={chatLoading}
-                    placeholder="Tanyakan harga, cari hemat, atau ganti profile preferensi..."
-                    className={`flex-1 px-6 py-4 rounded-2xl border-2 transition-all outline-none text-sm ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-100 focus:border-emerald-500 text-slate-900"}`}
+                    placeholder="Tanyakan harga, hemat..."
+                    className={`flex-1 min-w-0 px-4 md:px-6 py-3 md:py-4 rounded-2xl border-2 transition-all outline-none text-xs sm:text-sm ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-100 focus:border-emerald-500 text-slate-900"}`}
                   />
                   <button 
                     onClick={() => sendChatMessage()}
                     disabled={!chatInput.trim() || chatLoading}
-                    className={`px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 shrink-0 shadow-lg cursor-pointer ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-slate-900 text-white"}`}
+                    className={`px-4 md:px-6 py-3 md:py-4 rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all active:scale-95 shrink-0 shadow-lg cursor-pointer ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-slate-900 text-white"}`}
                   >
                     Kirim
                   </button>
