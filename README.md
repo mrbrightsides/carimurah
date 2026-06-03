@@ -3,6 +3,7 @@
 CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt the e-commerce and wholesale landscape in Indonesia. From retail hunters (B2C Smart Savers) to enterprise procurement squads (B2B Procurement Pro), we turn raw visual, voice, and text data into autonomous profit engines.
 
 [![Live App](https://img.shields.io/badge/Live-carimurah.elpeef.com-emerald.svg?style=flat-square)](https://carimurah.elpeef.com)
+[![Google Play](https://img.shields.io/badge/Google_Play-Download-darkgreen.svg?style=flat-square&logo=google-play)](https://play.google.com/store/apps/details?id=com.carimurah.app)
 [![Capacitor Native](https://img.shields.io/badge/Capacitor-Android-blue.svg?style=flat-square)](./SETUP.md)
 [![License](https://img.shields.io/badge/License-MIT-black.svg?style=flat-square)](./LICENSE)
 
@@ -11,6 +12,7 @@ CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt
 ## 🌍 Quick Access Links & Live Deployment
 
 *   **Live Application**: [https://carimurah.elpeef.com](https://carimurah.elpeef.com)
+*   **Google Play Store**: [Download on Google Play](https://play.google.com/store/apps/details?id=com.carimurah.app)
 *   **Source Code Repository**: [https://github.com/mrbrightsides/carimurah](https://github.com/mrbrightsides/carimurah)
 *   **Official Support Email**: [support@elpeef.com](mailto:support@elpeef.com)
 
@@ -22,6 +24,18 @@ CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt
 *   **Target**: General Indonesian consumers.
 *   **Features**: Scan AI (Foto/Voice), instant retail price comparison, and secure affiliate routing.
 *   **Revenue Source**: 100% automated Affiliate Commissions (Shopee, Tokopedia, Bukalapak).
+
+### ⚡ Paket Sachet & Eceran (Bebas Langganan Bulanan)
+Beli kuota sekali bayar (*pay-as-you-go*) tanpa pusing biaya bulanan berulang. Pilihan terbaik untuk kebutuhan yang fleksibel:
+*   **1. Paket Sachet Lite (Rp5.000)**:
+    *   **Kuota**: 5 Token Scan instan.
+    *   **Optimasi**: Paling hemat untuk kebutuhan belanja mingguan personal atau uji coba fitur.
+*   **2. Paket Terpopuler (Rp12.000)**:
+    *   **Kuota**: 15 Token Scan instan (Hemat 20% dibandingkan tarif eceran dasar).
+    *   **Optimasi**: Ideal untuk perbandingan harga belanja bulanan rumah tangga secara komprehensif.
+*   **3. Weekly Saver Pass (Rp9.900)**:
+    *   **Kuota**: 100 Token Scan melimpah aktif selama 7 hari (*Super Irit*).
+    *   **Optimasi**: Sangat pas untuk reseller, pedagang eceran, atau dropshipper yang melakukan survei pasokan mingguan secara intensif.
 
 ### 🥈 Pro Tier: Smart Saver (Rp49.000 / mo.)
 *   **Target**: Resellers, drop-shippers, & heavy personal shoppers.
