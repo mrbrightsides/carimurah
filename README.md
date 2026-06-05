@@ -61,6 +61,7 @@ Purchase a one-time quota (pay-as-you-go) without the hassle of recurring monthl
 
 ## 🛠️ Unified Core Capabilities
 
+*   **Bilingual Translation Support (Indonesian & English)**: Fully localized UI dashboard, welcoming hero cards, and flywheel components tailored dynamically based on simple profile-preference language selectors (perfect for international hackathon judges!).
 *   **CariMurah Enterprise Flywheel Workspace**: Interactive cockpit incorporating live forecasting widgets, printable high-security business documents, on-the-fly bulk quantity configurators, dynamic posture-based renegotiation script generation, and single-click WhatsApp API routing.
 *   **Integrated B2B QR Scanner & Ledger Suite**: Uses an optimized stacked trigger layout for single-handed mobile usage. Features an overlay-based Interactive Guide (*Panduan*), a sliding scan ledger showing the last 5 successful matches (saving/items audit), and a context-aware feedback/reporting FAB directly embedded within the viewfinder.
 *   **Predictive AI Cycle Engine**: Simulates discount patterns during Payday (8% off), Double Date (15% off), or Midnight Flash Sales (20% off) dynamically.

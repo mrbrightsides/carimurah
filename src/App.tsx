@@ -307,6 +307,149 @@ const getPlanPrice = (p: string | null) => {
   return "";
 };
 
+const TRANSLATIONS: Record<string, Record<string, string>> = {
+  id: {
+    b2bProcurementWorkspace: "B2B Procurement Workspace",
+    viewOfficialRfq: "Cetak RFQ Resmi",
+    saveStatusSent: "Simpan Status Sent",
+    procurementCycle: "SIKLUS PENGADAAN PERUSAHAAN",
+    flywheelTitle: "The Autonomous B2B B2B RFQ & WhatsApp Flywheel",
+    flywheelDesc: "Kami mengotomatiskan seluruh alur procurement: mulai dari estimasi tren kebutuhan, pembuatan RFQ cetak, draf negosiasi otomatis, hingga integrasi rute chat WhatsApp distributor secara otonom.",
+    step1Title: "Predictive Forecasting",
+    step1Desc: "Analisis siklus kelangkaan stok & anomali harga grosir.",
+    step1Badge: "Step 1 • Prediksi",
+    step2Title: "Autonomous RFQ Builder",
+    step2Desc: "Generasi dokumen penawaran harga dan cetak PDF resmi.",
+    step2Badge: "Step 2 • Dokumen",
+    step3Title: "AI Script Generator",
+    step3Desc: "Pemetaan gaya bahasa negosiasi (Kolaboratif / Agresif / Taktis).",
+    step3Badge: "Step 3 • AI Script",
+    step4Title: "WhatsApp URI Router",
+    step4Desc: "Peralihan draf negosiasi matang ke jalur chat WhatsApp supplier.",
+    step4Badge: "Step 4 • Rute WA",
+    configRfq: "Konfigurasi RFQ",
+    customizeDoc: "Kustomisasi Dokumen Penawaran",
+    yourCompany: "Nama Perusahaan Anda",
+    targetDelivery: "Target Delivery Lead Time",
+    partnerWholesaler: "Pilih Kontak Wholesaler Partner",
+    legalClause: "Dokumen ini merupakan draf referensi pengadaan otonom berdasar perbandingan real-time. Tidak mengikat hukum secara sepihak sebelum ditandatangani kedua belah pihak.",
+    authorizedRepresentative: "Representative",
+    savingLaba: "Total Potensi Penghematan Laba",
+    savingPercent: "Hemat",
+    accumulatedValue: "AKUMULASI NILAI TARGET RFQ",
+    customDraftToast: "Beralih ke supplier: ",
+    negotiationPostureTitle: "AI Strategic Posture Script",
+    postureHeadlineDesc: "Pilih gaya bahasa tawar-menawar Anda di bawah demi mengonstruksi draf negosiasi otomatis yang disesuaikan dengan volume pemesanan:",
+    quickSetSupplier: "Pilih Kontak Wholesaler Partner",
+    collaborativeStyle: "Kolaboratif",
+    aggressiveStyle: "Agresif",
+    tacticalStyle: "Taktis",
+    collaborativeSub: "Langganan rutin",
+    aggressiveSub: "Siap Tunai CO",
+    tacticalSub: "Bebas Ongkir Cargo",
+    targetPrice: "Harga Target",
+    targetPriceGrand: "HARGA TARGET",
+    totalTargetSavings: "Total Potensi Penghematan Laba",
+    autoCompiledScript: "AUTO-COMPILED SCRIPT",
+    copyScriptButton: "Copy Script",
+    copiedLabel: "Copied!",
+    openWhatsappButton: "Buka WhatsApp",
+    waRedirectHint: "Mengalihkan draf nego live ini langsung ke chat Wholesaler via WhatsApp Router.",
+    forecastTitle: "Forecast & Siklus Stok 📈",
+    forecastShortDesc: "Berdasarkan data harga pasar terkini dan musim permintaan grosir regional, berikut adalah prediksi AI mengenai landskap logistik Anda:",
+    aiMarketInsightTitle: "AI Market Insight",
+    aiMarketInsightDesc: "Cuaca kering regional di Jawa Timur diprediksi menaikkan biaya kargo logistik sebesar +12% dalam 24 hari ke depan. Sangat disarankan untuk mengajukan volume penawaran minimal 100 unit guna mengunci harga termurah.",
+    lowPriceRange: "⭐ Rentang Murah",
+    stableTrend: "Ukur Tren: Stabil",
+    welcomeTitleB2C: "Belanja Hemat Tanpa Boncos",
+    welcomeTitleB2B: "Sistem Pengadaan Grosir Otonom",
+    welcomeSubtitleB2C: "Bandingkan harga Shopee, Tokopedia & Bukalapak secara real-time",
+    welcomeSubtitleB2B: "Automasi RFQ, Nego WhatsApp, & QR Catalog Scanner untuk Bisnis Anda",
+    b2bToggleLabel: "B2B Procurement Mode",
+    scannedItems: "Riwayat Scan",
+    smartDashboard: "Smart Dashboard",
+    guestLoginAlert: "Login untuk menyimpan riwayat belanja Anda secara lokal",
+    loginNow: "Login Sekarang",
+    realtimePriceMonitorOffline: "Dukungan monitor harga real-time tidak tersedia saat offline",
+    searchPlaceholderB2C: "Tempel link Shopee/Tokopedia atau ketik nama barang...",
+    searchPlaceholderB2B: "Ketik nama barang bulk atau scan QR Catalog Wholesaler...",
+    voiceSearchButton: "Cari Suara",
+    scanBarcodeButton: "Pindai Barcode / QR",
+    batchRfqButton: "Rancang RFQ Otonom (+)",
+    emptyHistory: "Belum ada riwayat pencarian. Yuk, mulai cari atau scan produk!",
+  },
+  en: {
+    b2bProcurementWorkspace: "B2B Procurement Workspace",
+    viewOfficialRfq: "Print Official RFQ",
+    saveStatusSent: "Save Status Sent",
+    procurementCycle: "ENTERPRISE PROCUREMENT CYCLE",
+    flywheelTitle: "The Autonomous B2B RFQ & WhatsApp Flywheel",
+    flywheelDesc: "We automate your entire procurement pipeline: from seasonal demand forecasting, official RFQ print rendering, automated negotiation draft mapping, to direct wholesaler WhatsApp routing.",
+    step1Title: "Predictive Forecasting",
+    step1Desc: "Analyze stock scarcity cycles & regional wholesale price surges.",
+    step1Badge: "Step 1 • Forecast",
+    step2Title: "Autonomous RFQ Builder",
+    step2Desc: "Generate professional price quotation requests and official printable PDFs.",
+    step2Badge: "Step 2 • RFQ",
+    step3Title: "AI Script Generator",
+    step3Desc: "Generate strategic negotiation drafts (Collaborative, Aggressive, or Tactical).",
+    step3Badge: "Step 3 • AI Script",
+    step4Title: "WhatsApp URI Router",
+    step4Desc: "Directly transfer negotiation scripts into the wholesaler's WhatsApp chat.",
+    step4Badge: "Step 4 • Route WA",
+    configRfq: "RFQ Configuration",
+    customizeDoc: "Customize Quotation Document",
+    yourCompany: "Your Company Name",
+    targetDelivery: "Target Delivery Lead Time",
+    partnerWholesaler: "Choose Wholesaler Partner Contact",
+    legalClause: "This document is a draft reference for autonomous procurement based on real-time comparisons. It is not legally binding unilaterally before signature by both parties.",
+    authorizedRepresentative: "Representative",
+    savingLaba: "Total Potential Margin Savings",
+    savingPercent: "Save",
+    accumulatedValue: "ACCUMULATED RFQ TARGET VALUE",
+    customDraftToast: "Switched supplier to: ",
+    negotiationPostureTitle: "AI Strategic Posture Script",
+    postureHeadlineDesc: "Choose your bargaining stance below to dynamically compile your negotiation script tailored to the ordering volumes:",
+    quickSetSupplier: "Select Wholesaler Partner Contact",
+    collaborativeStyle: "Collaborative",
+    aggressiveStyle: "Aggressive",
+    tacticalStyle: "Tactical",
+    collaborativeSub: "Routine supply",
+    aggressiveSub: "Same-day cash",
+    tacticalSub: "Free freight kargo",
+    targetPrice: "Target Price",
+    targetPriceGrand: "TARGET PRICE",
+    totalTargetSavings: "Total Margin Profit Savings",
+    autoCompiledScript: "AUTO-COMPILED SCRIPT",
+    copyScriptButton: "Copy Script",
+    copiedLabel: "Copied!",
+    openWhatsappButton: "Open WhatsApp",
+    waRedirectHint: "Redirects this live negotiation draft directly to the Wholesaler's WhatsApp via Secure URI Router.",
+    forecastTitle: "Forecast & Stock Scarcity 📈",
+    forecastShortDesc: "Based on real-time market indices and regional seasonal demand, here is the AI logistics landscape projection:",
+    aiMarketInsightTitle: "AI Market Insight",
+    aiMarketInsightDesc: "Dry weather across East Java is projected to raise regional logistic freight fees by +12% over the next 24 days. Seeking minimum order volumes of 100 units is highly advised to lock-in the lowest rate range.",
+    lowPriceRange: "⭐ Cheap Range",
+    stableTrend: "Trend: Stable",
+    welcomeTitleB2C: "Shop Smart & Save Big",
+    welcomeTitleB2B: "Autonomous Bulk Procurement",
+    welcomeSubtitleB2C: "Compare Shopee, Tokopedia & Bukalapak prices in real-time",
+    welcomeSubtitleB2B: "Automate RFQs, WhatsApp negotiation, & scan wholesaler catalogs",
+    b2bToggleLabel: "B2B Procurement Mode",
+    scannedItems: "Scanned Registry",
+    smartDashboard: "Smart Dashboard",
+    guestLoginAlert: "Login to save your search history and manage procurements",
+    loginNow: "Login Now",
+    realtimePriceMonitorOffline: "Real-time price monitoring is unavailable while offline",
+    searchPlaceholderB2C: "Paste Shopee/Tokopedia link or type product name...",
+    searchPlaceholderB2B: "Type bulk commodity or scan vendor QR Catalog...",
+    voiceSearchButton: "Voice Search",
+    scanBarcodeButton: "Scan Barcode / QR",
+    batchRfqButton: "Design Autonomous RFQ (+)",
+    emptyHistory: "No search history yet. Start searching or scanning products!",
+  }
+};
+
 export default function App() {
   // Toast notifications state
   const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info" | "warning"; message: string }[]>([]);
@@ -392,6 +535,11 @@ export default function App() {
       return resolved;
     });
   }, [user?.email, triggerToast]);
+
+  const currentLang = profile?.preferences?.language || "id";
+  const t = useCallback((key: keyof typeof TRANSLATIONS["id"]) => {
+    return TRANSLATIONS[currentLang]?.[key] || TRANSLATIONS["id"]?.[key] || key;
+  }, [currentLang]);
   const [watchlist, setWatchlist] = useState<ItemAnalysis[]>([]);
   const [manualText, setManualText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -2946,10 +3094,16 @@ export default function App() {
               <div className="flex justify-between items-start">
                   <div className="space-y-4">
                     <h2 className="text-4xl font-extrabold tracking-tight leading-tight text-balance">
-                      {isB2B ? "Laba Warung Bakal Melejit." : "Belanja Irit Gak Pakai Ribet."}
+                      {profile?.preferences?.language === "en" 
+                        ? (isB2B ? "Automate Bulk Procurement." : "Shop Smart, Save Big.")
+                        : (isB2B ? "Laba Warung Bakal Melejit." : "Belanja Irit Gak Pakai Ribet.")
+                      }
                     </h2>
                     <p className={`text-lg leading-relaxed ${isB2B ? "text-slate-400" : "text-slate-500"}`}>
-                      CariMurah.ai membantu kamu menemukan harga distributor & retail termurah se-Indonesia.
+                      {profile?.preferences?.language === "en"
+                        ? "CariMurah.ai helps you scan catalogs, compare retail & wholesale prices, and generate strategic B2B RFQs."
+                        : "CariMurah.ai membantu kamu menemukan harga distributor & retail termurah se-Indonesia."
+                      }
                     </p>
                     {(!profile?.subscription?.tier || profile?.subscription?.tier === "FREE") && (
                       <button 
@@ -3241,8 +3395,8 @@ export default function App() {
                          <ArrowLeft className="w-5 h-5" />
                       </button>
                       <div>
-                         <span className={`text-[9px] font-black uppercase tracking-widest ${isB2B ? "text-indigo-400" : "text-emerald-500"}`}>B2B Procurement Workspace</span>
-                         <h2 className={`text-2xl font-black tracking-tight ${isB2B ? "text-indigo-400" : "text-slate-900 dark:text-white"}`}>CariMurah Enterprise Flywheel</h2>
+                         <span className={`text-[9px] font-black uppercase tracking-widest ${isB2B ? "text-indigo-400" : "text-emerald-500"}`}>{t("b2bProcurementWorkspace")}</span>
+                         <h2 className={`text-2xl font-black tracking-tight ${isB2B ? "text-indigo-400" : "text-slate-900 dark:text-white"}`}>{t("workspaceTitle")}</h2>
                       </div>
                    </div>
                    
@@ -3251,7 +3405,7 @@ export default function App() {
                         onClick={() => window.print()}
                         className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider bg-white dark:bg-white/10 text-slate-800 dark:text-white border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 dark:hover:bg-white/20 transition-all cursor-pointer"
                       >
-                         <Printer className="w-4 h-4 text-indigo-500" /> Cetak RFQ Resmi
+                         <Printer className="w-4 h-4 text-indigo-500" /> {t("viewOfficialRfq")}
                       </button>
                       <button 
                         onClick={() => {
@@ -3266,7 +3420,7 @@ export default function App() {
                           isB2B ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20" : "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20"
                         }`}
                       >
-                         <CheckCircle2 className="w-4 h-4 text-emerald-300" /> Simpan Status Sent
+                         <CheckCircle2 className="w-4 h-4 text-emerald-300" /> {t("saveStatusSent")}
                       </button>
                    </div>
                 </div>
@@ -3277,10 +3431,10 @@ export default function App() {
                    <div className="absolute bottom-0 left-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none" />
                    
                    <div className="text-center max-w-xl mx-auto mb-8 space-y-2">
-                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.25em] text-indigo-400">SIKLUS PENGADAAN PERUSAHAAN</span>
-                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">The Autonomous B2B RFQ & WhatsApp Flywheel</h3>
+                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.25em] text-indigo-400">{t("procurementCycle")}</span>
+                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">{t("flywheelTitle")}</h3>
                       <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
-                         Kami mengotomatiskan seluruh alur procurement: mulai dari estimasi tren kebutuhan, pembuatan RFQ cetak, draf negosiasi otomatis, hingga integrasi rute chat WhatsApp distributor secara otonom.
+                         {t("flywheelDesc")}
                       </p>
                    </div>
 
@@ -3289,35 +3443,35 @@ export default function App() {
                       {[
                         { 
                           step: 1, 
-                          title: "Predictive Forecasting", 
+                          title: t("step1Title"), 
                           icon: TrendingDown,
-                          desc: "Analisis siklus kelangkaan stok & anomali harga grosir.",
+                          desc: t("step1Desc"),
                           highlight: "bg-amber-500/10 text-amber-400 border-amber-500/30",
-                          badge: "Step 1 • Prediksi"
+                          badge: t("step1Badge")
                         },
                         { 
                           step: 2, 
-                          title: "Autonomous RFQ Builder", 
+                          title: t("step2Title"), 
                           icon: FileText,
-                          desc: "Generasi dokumen penawaran harga dan cetak PDF resmi.",
+                          desc: t("step2Desc"),
                           highlight: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
-                          badge: "Step 2 • Dokumen"
+                          badge: t("step2Badge")
                         },
                         { 
                           step: 3, 
-                          title: "AI Script Generator", 
+                          title: t("step3Title"), 
                           icon: MessageSquare,
-                          desc: "Pemetaan gaya bahasa negosiasi (Kolaboratif / Agresif / Taktis).",
+                          desc: t("step3Desc"),
                           highlight: "bg-pink-500/10 text-pink-400 border-pink-500/30",
-                          badge: "Step 3 • AI Script"
+                          badge: t("step3Badge")
                         },
                         { 
                           step: 4, 
-                          title: "WhatsApp URI Router", 
+                          title: t("step4Title"), 
                           icon: Smartphone,
-                          desc: "Peralihan draf negosiasi matang ke jalur chat WhatsApp supplier.",
+                          desc: t("step4Desc"),
                           highlight: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-                          badge: "Step 4 • Rute WA"
+                          badge: t("step4Badge")
                         }
                       ].map((itemStep, sIdx) => {
                          const IconComp = itemStep.icon;
@@ -3354,14 +3508,14 @@ export default function App() {
                                <Settings className="w-5 h-5 animate-spin-slow" />
                             </div>
                             <div>
-                               <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Konfigurasi RFQ</span>
-                               <h3 className="text-base font-black tracking-tight">Kustomisasi Dokumen Penawaran</h3>
+                               <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">{t("configRfq")}</span>
+                               <h3 className="text-base font-black tracking-tight">{t("customizeDoc")}</h3>
                             </div>
                          </div>
 
                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
                             <div className="space-y-1.5">
-                               <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">Nama Perusahaan Anda</label>
+                               <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">{t("yourCompany")}</label>
                                <input 
                                  type="text"
                                  value={rfqCompanySender}
@@ -3376,7 +3530,7 @@ export default function App() {
                             </div>
 
                             <div className="space-y-1.5">
-                               <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">Target Delivery Lead Time</label>
+                               <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">{t("targetDelivery")}</label>
                                <select 
                                  value={rfqLeadTime}
                                  onChange={(e) => setRfqLeadTime(e.target.value)}
@@ -3395,7 +3549,7 @@ export default function App() {
 
                          {/* Quick Set Supplier Contacts */}
                          <div className="space-y-3 pt-2 font-sans">
-                            <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">Pilih Kontak Wholesaler Partner</label>
+                            <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">{t("partnerWholesaler")}</label>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                {[
                                  { name: "CV Sahabat Sembako", phone: "+6281234567890", desc: "Sembako Utama" },
