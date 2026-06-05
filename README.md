@@ -25,17 +25,17 @@ CariMurah.ai is a high-sophistication, multi-agent AI engine designed to disrupt
 *   **Features**: Scan AI (Foto/Voice), instant retail price comparison, and secure affiliate routing.
 *   **Revenue Source**: 100% automated Affiliate Commissions (Shopee, Tokopedia, Bukalapak).
 
-### ⚡ Paket Sachet & Eceran (Bebas Langganan Bulanan)
-Beli kuota sekali bayar (*pay-as-you-go*) tanpa pusing biaya bulanan berulang. Pilihan terbaik untuk kebutuhan yang fleksibel:
-*   **1. Paket Sachet Lite (Rp5.000)**:
-    *   **Kuota**: 5 Token Scan instan.
-    *   **Optimasi**: Paling hemat untuk kebutuhan belanja mingguan personal atau uji coba fitur.
-*   **2. Paket Terpopuler (Rp12.000)**:
-    *   **Kuota**: 15 Token Scan instan (Hemat 20% dibandingkan tarif eceran dasar).
-    *   **Optimasi**: Ideal untuk perbandingan harga belanja bulanan rumah tangga secara komprehensif.
-*   **3. Weekly Saver Pass (Rp9.900)**:
-    *   **Kuota**: 100 Token Scan melimpah aktif selama 7 hari (*Super Irit*).
-    *   **Optimasi**: Sangat pas untuk reseller, pedagang eceran, atau dropshipper yang melakukan survei pasokan mingguan secara intensif.
+### ⚡ Sachet & Retail Packages (No Monthly Subscription)
+Purchase a one-time quota (pay-as-you-go) without the hassle of recurring monthly fees. The best choice for flexible needs:
+1. Sachet Lite Package (Rp5,000):
+* **Quota**: 5 instant Scan Tokens.
+* **Optimization**: Most economical for personal weekly shopping needs or feature trials.
+2. Most Popular Package (Rp12,000):
+* **Quota**: 15 instant Scan Tokens (Save 20% compared to the basic retail rate).
+* **Optimization**: Ideal for comprehensive household monthly shopping price comparisons.
+3. Weekly Saver Pass (Rp9,900):
+* **Quota**: 100 abundant Scan Tokens active for 7 days (*Super Economical*).
+* **Optimization**: Perfect for resellers, retailers, or dropshippers who conduct intensive weekly supply surveys.
 
 ### 🥈 Pro Tier: Smart Saver (Rp49.000 / mo.)
 *   **Target**: Resellers, drop-shippers, & heavy personal shoppers.
