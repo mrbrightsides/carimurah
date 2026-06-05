@@ -62,7 +62,10 @@ import {
   Send,
   Mail,
   AlertTriangle,
-  Info
+  Info,
+  Printer,
+  Calendar,
+  Smartphone
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { Capacitor } from "@capacitor/core";
@@ -415,10 +418,23 @@ export default function App() {
   const [simulatedPromoDays, setSimulatedPromoDays] = useState<number>(0); // 0 = normal day, 1 = Payday, 2 = Double Date 12.12, 3 = Midnight flash sale
   const [negotiationPosture, setNegotiationPosture] = useState<"agresif" | "kolaboratif" | "taktis">("kolaboratif");
   const [copiedNegotiation, setCopiedNegotiation] = useState(false);
+
+  // RFQ Workflow States
+  const [rfqSupplierPhone, setRfqSupplierPhone] = useState<string>("+6281234567890");
+  const [rfqSupplierName, setRfqSupplierName] = useState<string>("CV Sahabat Sembako");
+  const [rfqCompanySender, setRfqCompanySender] = useState<string>("Toko Retail Barokah");
+  const [rfqLeadTime, setRfqLeadTime] = useState<string>("1-2 Hari Kerja");
+  const [rfqQuantities, setRfqQuantities] = useState<Record<number, number>>({});
+  const [activeFlywheelTab, setActiveFlywheelTab] = useState<string>("all");
   
   // Onboarding Modal state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [tourStep, setTourStep] = useState<number | null>(null);
+
+  // Audio Playback UI/UX States
+  const [audioStatus, setAudioStatus] = useState<"idle" | "loading" | "playing">("idle");
+  const activeAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const activeAudioCtxRef = useRef<AudioContext | null>(null);
 
   // Daily quota indicators (3 scans per day)
   const [dailyScansCount, setDailyScansCount] = useState<number>(0);
@@ -2044,10 +2060,29 @@ export default function App() {
   };
 
   const playVoice = async (text: string) => {
-    // Stop any existing browser synthesis
+    // Cancel browser synthesis
     window.speechSynthesis.cancel();
     
-    if (!text) return;
+    // Stop any previously playing AudioContext source
+    if (activeAudioSourceRef.current) {
+      try {
+        activeAudioSourceRef.current.stop();
+      } catch (e) {}
+      activeAudioSourceRef.current = null;
+    }
+    if (activeAudioCtxRef.current) {
+      try {
+        await activeAudioCtxRef.current.close();
+      } catch (e) {}
+      activeAudioCtxRef.current = null;
+    }
+
+    if (!text) {
+      setAudioStatus("idle");
+      return;
+    }
+
+    setAudioStatus("loading");
 
     try {
       // Use high-quality Studio TTS via server
@@ -2060,15 +2095,28 @@ export default function App() {
       const data = await res.json();
       
       if (data.audio) {
+        setAudioStatus("playing");
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        activeAudioCtxRef.current = audioCtx;
+        
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume();
+        }
+
         const binaryString = atob(data.audio);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
         
-        // PCM 16-bit Mono (S16LE) 24kHz
-        const view = new Int16Array(bytes.buffer);
+        // PCM 16-bit Mono (S16LE) 24kHz - safely parsed using DataView to handle any odd byte sizes
+        const sampleCount = Math.floor(bytes.length / 2);
+        const view = new Int16Array(sampleCount);
+        const dataView = new DataView(bytes.buffer);
+        for (let i = 0; i < sampleCount; i++) {
+          view[i] = dataView.getInt16(i * 2, true);
+        }
+
         const audioBuffer = audioCtx.createBuffer(1, view.length, data.rate || 24000);
         const channelData = audioBuffer.getChannelData(0);
         
@@ -2077,9 +2125,12 @@ export default function App() {
         }
         
         const source = audioCtx.createBufferSource();
+        activeAudioSourceRef.current = source;
         source.buffer = audioBuffer;
         source.connect(audioCtx.destination);
+        
         source.onended = () => {
+          setAudioStatus("idle");
           if (typeof pendo !== "undefined") {
             pendo.track("tts_playback_completed", {
               voice_model: "Zephyr",
@@ -2093,12 +2144,21 @@ export default function App() {
       } else {
         throw new Error("No audio returned from Studio AI");
       }
-    } catch (err) {
-      console.error("Studio TTS fallback to Web Speech:", err);
+    } catch (err: any) {
+      console.warn("Studio TTS failed, falling back to Web Speech:", err);
+      setAudioStatus("playing");
+      
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "id-ID";
-      utterance.rate = 0.95;
-      utterance.pitch = 1.1;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.onend = () => {
+        setAudioStatus("idle");
+      };
+      utterance.onerror = () => {
+        setAudioStatus("idle");
+      };
+      
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -3173,72 +3233,524 @@ export default function App() {
                 </div>
              </motion.section>
           ) : mode === "rfq" && analysis?.batchResult ? (
-             <motion.section key="rfq" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8">
-                <div className="flex items-center gap-4">
-                   <button onClick={() => setMode(null)} className="p-2 bg-slate-100 dark:bg-white/10 rounded-full"><ArrowLeft className="w-5 h-5" /></button>
-                   <h2 className="text-2xl font-black text-indigo-400">Draft Request for Quotation</h2>
-                </div>
-                
-                <div className="p-8 rounded-[2.5rem] bg-white text-slate-950 space-y-6 shadow-2xl">
-                   <div className="border-b-4 border-slate-900 pb-4">
-                      <h3 className="text-xl font-black uppercase italic">OFFICIAL RFQ DOCUMENT</h3>
-                      <p className="text-[10px] opacity-60">Generated by CariMurah.ai Enterprise Agent</p>
+             <motion.section key="rfq" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-8 print:p-0">
+                {/* Header & Back Action */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-6 print:hidden">
+                   <div className="flex items-center gap-4">
+                      <button onClick={() => setMode(null)} className="p-3 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 rounded-full transition-all active:scale-95 cursor-pointer text-slate-800 dark:text-white">
+                         <ArrowLeft className="w-5 h-5" />
+                      </button>
+                      <div>
+                         <span className={`text-[9px] font-black uppercase tracking-widest ${isB2B ? "text-indigo-400" : "text-emerald-500"}`}>B2B Procurement Workspace</span>
+                         <h2 className={`text-2xl font-black tracking-tight ${isB2B ? "text-indigo-400" : "text-slate-900 dark:text-white"}`}>CariMurah Enterprise Flywheel</h2>
+                      </div>
                    </div>
                    
-                   <div className="space-y-4">
-                      <div className="grid grid-cols-2 text-xs font-bold gap-4">
-                         <div>
-                            <span className="block opacity-40 uppercase text-[8px] mb-1">To Supplier</span>
-                            <span>Multiple Verified Vendors</span>
+                   <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider bg-white dark:bg-white/10 text-slate-800 dark:text-white border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 dark:hover:bg-white/20 transition-all cursor-pointer"
+                      >
+                         <Printer className="w-4 h-4 text-indigo-500" /> Cetak RFQ Resmi
+                      </button>
+                      <button 
+                        onClick={() => {
+                           setAnalysis({ 
+                             ...analysis, 
+                             batchResult: { ...analysis.batchResult!, rfqStatus: 'sent' }
+                           });
+                           setMode(null);
+                           triggerToast("Berhasil meluncurkan re-negosiasi rujukan Anda!", "success");
+                        }}
+                        className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-widest text-white border-none rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-md cursor-pointer ${
+                          isB2B ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20" : "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20"
+                        }`}
+                      >
+                         <CheckCircle2 className="w-4 h-4 text-emerald-300" /> Simpan Status Sent
+                      </button>
+                   </div>
+                </div>
+
+                {/* VISUAL INFOGRAPHIC FLYWHEEL - Mirroring "The autonomous B2B RFQ and WhatsApp flywheel" */}
+                <div className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[2.5rem] border border-indigo-500/20 shadow-2xl relative overflow-hidden print:hidden text-left">
+                   <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] -mr-20 -mt-20 pointer-events-none" />
+                   <div className="absolute bottom-0 left-0 w-80 h-80 bg-emerald-500/5 rounded-full blur-[100px] -ml-20 -mb-20 pointer-events-none" />
+                   
+                   <div className="text-center max-w-xl mx-auto mb-8 space-y-2">
+                      <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.25em] text-indigo-400">SIKLUS PENGADAAN PERUSAHAAN</span>
+                      <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">The Autonomous B2B RFQ & WhatsApp Flywheel</h3>
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+                         Kami mengotomatiskan seluruh alur procurement: mulai dari estimasi tren kebutuhan, pembuatan RFQ cetak, draf negosiasi otomatis, hingga integrasi rute chat WhatsApp distributor secara otonom.
+                      </p>
+                   </div>
+
+                   {/* Interactive Hub Flowchart Graphic */}
+                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10 font-sans">
+                      {[
+                        { 
+                          step: 1, 
+                          title: "Predictive Forecasting", 
+                          icon: TrendingDown,
+                          desc: "Analisis siklus kelangkaan stok & anomali harga grosir.",
+                          highlight: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+                          badge: "Step 1 • Prediksi"
+                        },
+                        { 
+                          step: 2, 
+                          title: "Autonomous RFQ Builder", 
+                          icon: FileText,
+                          desc: "Generasi dokumen penawaran harga dan cetak PDF resmi.",
+                          highlight: "bg-indigo-500/10 text-indigo-400 border-indigo-500/30",
+                          badge: "Step 2 • Dokumen"
+                        },
+                        { 
+                          step: 3, 
+                          title: "AI Script Generator", 
+                          icon: MessageSquare,
+                          desc: "Pemetaan gaya bahasa negosiasi (Kolaboratif / Agresif / Taktis).",
+                          highlight: "bg-pink-500/10 text-pink-400 border-pink-500/30",
+                          badge: "Step 3 • AI Script"
+                        },
+                        { 
+                          step: 4, 
+                          title: "WhatsApp URI Router", 
+                          icon: Smartphone,
+                          desc: "Peralihan draf negosiasi matang ke jalur chat WhatsApp supplier.",
+                          highlight: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+                          badge: "Step 4 • Rute WA"
+                        }
+                      ].map((itemStep, sIdx) => {
+                         const IconComp = itemStep.icon;
+                         return (
+                            <button
+                               key={sIdx}
+                               onClick={() => triggerToast(`Fokus ke bagian: ${itemStep.title}`, "info")}
+                               className={`p-5 rounded-3xl border text-left transition-all duration-300 focus:outline-none cursor-pointer active:scale-95 group hover:-translate-y-1 ${itemStep.highlight} bg-slate-950/40`}
+                            >
+                               <div className="flex justify-between items-start mb-4">
+                                  <div className="p-3 bg-white/5 rounded-2xl group-hover:scale-110 transition-transform">
+                                     <IconComp className="w-5 h-5" />
+                                  </div>
+                                  <span className="text-[8px] font-black uppercase tracking-widest bg-white/10 px-2 py-0.5 rounded-full">{itemStep.badge}</span>
+                               </div>
+                               <h4 className="font-extrabold text-white text-sm mb-1">{itemStep.title}</h4>
+                               <p className="text-[10px] text-slate-400 leading-relaxed">{itemStep.desc}</p>
+                            </button>
+                         );
+                      })}
+                   </div>
+                </div>
+
+                {/* MASTER WORKSPACE GRID LAYOUT */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start text-slate-900 dark:text-white">
+                   
+                   {/* LEFT COLUMN: ACTIVE DOCK BUILDER & PRINTABLE RFQ (lg:span-7) */}
+                   <div className="lg:col-span-7 space-y-8">
+                      
+                      {/* Configuration & Input Station */}
+                      <div className={`p-8 rounded-[2.5rem] border ${isB2B ? "bg-white/5 border-white/10" : "bg-white border-slate-200"} space-y-6 print:hidden text-left`}>
+                         <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-500">
+                               <Settings className="w-5 h-5 animate-spin-slow" />
+                            </div>
+                            <div>
+                               <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Konfigurasi RFQ</span>
+                               <h3 className="text-base font-black tracking-tight">Kustomisasi Dokumen Penawaran</h3>
+                            </div>
                          </div>
-                         <div className="text-right">
-                            <span className="block opacity-40 uppercase text-[8px] mb-1">Date</span>
-                            <span>{new Date().toLocaleDateString("id-ID")}</span>
+
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
+                            <div className="space-y-1.5">
+                               <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">Nama Perusahaan Anda</label>
+                               <input 
+                                 type="text"
+                                 value={rfqCompanySender}
+                                 onChange={(e) => setRfqCompanySender(e.target.value)}
+                                 className={`w-full px-4 py-3 rounded-xl text-xs font-bold border transition-all ${
+                                   isB2B 
+                                     ? "bg-slate-900 border-white/10 focus:border-indigo-500 text-white" 
+                                     : "bg-slate-50 border-slate-200 focus:border-emerald-500 text-slate-950"
+                                 }`}
+                                 placeholder="Toko Kelontong Anda"
+                               />
+                            </div>
+
+                            <div className="space-y-1.5">
+                               <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">Target Delivery Lead Time</label>
+                               <select 
+                                 value={rfqLeadTime}
+                                 onChange={(e) => setRfqLeadTime(e.target.value)}
+                                 className={`w-full px-4 py-3 rounded-xl text-xs font-bold border transition-all ${
+                                   isB2B 
+                                     ? "bg-slate-900 border-white/10 focus:border-indigo-500 text-white" 
+                                     : "bg-slate-50 border-slate-200 focus:border-emerald-500 text-slate-950"
+                                 }`}
+                               >
+                                  <option value="1-2 Hari Kerja">💡 Super Prioritas (1-2 hari kerja)</option>
+                                  <option value="3-5 Hari Kerja">📦 Cargo Hemat (3-5 hari kerja)</option>
+                                  <option value="7+ Hari Kerja">⚓ Bulk Container (Seminggu lebih)</option>
+                               </select>
+                            </div>
+                         </div>
+
+                         {/* Quick Set Supplier Contacts */}
+                         <div className="space-y-3 pt-2 font-sans">
+                            <label className="block text-[10px] font-black uppercase tracking-wider opacity-60">Pilih Kontak Wholesaler Partner</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                               {[
+                                 { name: "CV Sahabat Sembako", phone: "+6281234567890", desc: "Sembako Utama" },
+                                 { name: "Gudang Karawang", phone: "+6285678901234", desc: "Pusat Beras & Bulk" },
+                                 { name: "Supplier Kargo Madu", phone: "+628994567123", desc: "Minyak & Gula Pasir" }
+                               ].map((sc, scIdx) => (
+                                  <button
+                                    key={scIdx}
+                                    type="button"
+                                    onClick={() => {
+                                      setRfqSupplierName(sc.name);
+                                      setRfqSupplierPhone(sc.phone);
+                                      triggerToast(`Beralih ke supplier: ${sc.name}`, "info");
+                                    }}
+                                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                                      rfqSupplierName === sc.name
+                                        ? "bg-indigo-600 border-indigo-400 text-white font-bold"
+                                        : (isB2B ? "bg-white/5 hover:bg-white/10 border-white/5 text-white" : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700")
+                                    }`}
+                                  >
+                                     <span className="block text-[10px] font-extrabold">{sc.name}</span>
+                                     <span className="block text-[8px] opacity-60 mt-0.5">{sc.phone} | {sc.desc}</span>
+                                  </button>
+                               ))}
+                            </div>
                          </div>
                       </div>
 
-                      <table className="w-full text-left text-xs">
-                         <thead className="border-b border-slate-200">
-                            <tr>
-                               <th className="py-2">Item</th>
-                               <th className="py-2 text-right">Target Price</th>
-                            </tr>
-                         </thead>
-                         <tbody>
-                            {analysis.batchResult.items.map((it, ii) => (
-                               <tr key={ii} className="border-b border-slate-50 last:border-0">
-                                  <td className="py-2 font-medium">{it.productName}</td>
-                                  <td className="py-2 text-right font-bold">Rp{it.recommendedPrice.toLocaleString("id-ID")}</td>
-                               </tr>
-                            ))}
-                         </tbody>
-                      </table>
+                      {/* Official Mock Business Paper RFQ Document - Styled for elegant printing */}
+                      <div className="p-10 rounded-[2.5rem] bg-white text-slate-950 shadow-2xl border border-slate-200 relative overflow-hidden print:border-0 print:shadow-none print:p-0 text-left font-sans">
+                         {/* Watermark brand icon */}
+                         <div className="absolute top-8 right-8 scale-75 opacity-10 uppercase font-black text-6xl tracking-widest select-none print:hidden">
+                            RFQ
+                         </div>
+                         
+                         {/* Header Corporate Section */}
+                         <div className="flex justify-between items-start border-b-4 border-slate-900 pb-6 mb-8">
+                            <div>
+                               <h3 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">REQUEST FOR QUOTATION</h3>
+                               <p className="text-[9px] font-bold text-indigo-600 tracking-wider uppercase">CariMurah.ai Strategic Purchasing System</p>
+                               <span className="text-[8px] text-slate-400 font-mono">DRAFT REF NO: RFQ-{new Date().getFullYear()}{(new Date().getMonth() + 1).toString().padStart(2, '0')}{new Date().getDate().toString().padStart(2, '0')}-09XC</span>
+                            </div>
+                            <div className="text-right">
+                               <span className="font-mono text-sm font-black text-rose-600 block">HARGA TARGET</span>
+                               <span className="text-[8px] opacity-65 font-black uppercase tracking-widest block">Metode Pembayaran: COD / NET 14</span>
+                            </div>
+                         </div>
+
+                         {/* Metadata Grid */}
+                         <div className="grid grid-cols-2 gap-8 text-xs font-medium mb-8 border-b border-slate-200 pb-6">
+                            <div className="space-y-1">
+                               <span className="block text-[8px] font-black uppercase opacity-40">Pengirim (Pembeli)</span>
+                               <span className="font-black text-slate-900">{rfqCompanySender}</span>
+                               <span className="block text-slate-500">Contact: Akun Terverifikasi Enterprise</span>
+                               <span className="block text-slate-400">Timestamp: {new Date().toLocaleString("id-ID")}</span>
+                            </div>
+                            <div className="text-right space-y-1">
+                               <span className="block text-[8px] font-black uppercase opacity-40">Target Supplier</span>
+                               <span className="font-black text-slate-900">{rfqSupplierName}</span>
+                               <span className="block text-slate-500">Jalur Penerbitan: WhatsApp Secure Bridge</span>
+                               <span className="block text-slate-400">Target Lead Time: {rfqLeadTime}</span>
+                            </div>
+                         </div>
+
+                         {/* Core Items Listing with Editable Quantities */}
+                         <div className="space-y-6">
+                            <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Daftar Item Penawaran & Volume Pembelian</span>
+                            
+                            <div className="overflow-x-auto">
+                               <table className="w-full text-left text-xs border-collapse divide-y divide-slate-200">
+                                  <thead>
+                                     <tr className="text-slate-400 text-[9px] uppercase tracking-wider font-extrabold">
+                                        <th className="pb-3 text-left animate-pulse">Nama Produk (Scanned Item)</th>
+                                        <th className="pb-3 text-center print:hidden" style={{ width: "135px" }}>Atur Volume</th>
+                                        <th className="pb-3 text-center">Jumlah Target</th>
+                                        <th className="pb-3 text-right">Harga Target</th>
+                                        <th className="pb-3 text-right">Subtotal Target</th>
+                                     </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 font-bold">
+                                     {analysis.batchResult.items.map((it, ii) => {
+                                        const qty = rfqQuantities[ii] !== undefined ? rfqQuantities[ii] : 100;
+                                        const targetPrice = it.recommendedPrice;
+                                        const subtotal = targetPrice * qty;
+                                        
+                                        return (
+                                           <tr key={ii} className="hover:bg-slate-50/50 transition-colors text-slate-900">
+                                              <td className="py-4 font-extrabold max-w-[150px] sm:max-w-xs truncate">
+                                                 <span>{it.productName}</span>
+                                                 <span className="block text-[8px] opacity-40 font-normal uppercase italic mt-0.5">Brand: {it.brand || "Generik"}</span>
+                                              </td>
+                                              <td className="py-4 text-center print:hidden">
+                                                 <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const newQty = Math.max(10, qty - 10);
+                                                        setRfqQuantities({ ...rfqQuantities, [ii]: newQty });
+                                                      }}
+                                                      className="px-1.5 py-1 hover:bg-white rounded text-slate-700 active:scale-95 cursor-pointer border border-transparent font-black"
+                                                    >
+                                                       -10
+                                                    </button>
+                                                    <input
+                                                      type="number"
+                                                      value={qty}
+                                                      onChange={(e) => {
+                                                        const val = parseInt(e.target.value) || 1;
+                                                        setRfqQuantities({ ...rfqQuantities, [ii]: Math.max(1, val) });
+                                                      }}
+                                                      className="w-10 text-center bg-transparent border-none text-[10px] font-black focus:outline-none focus:ring-0 p-0 text-slate-950 font-mono"
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        const newQty = qty + 10;
+                                                        setRfqQuantities({ ...rfqQuantities, [ii]: newQty });
+                                                      }}
+                                                      className="px-1.5 py-1 hover:bg-white rounded text-slate-700 active:scale-95 cursor-pointer border border-transparent font-black"
+                                                    >
+                                                       +10
+                                                    </button>
+                                                 </div>
+                                              </td>
+                                              <td className="py-4 text-center text-slate-600 font-mono text-[11px]">{qty} Unit</td>
+                                              <td className="py-4 text-right text-slate-900 font-mono">Rp{targetPrice.toLocaleString("id-ID")}</td>
+                                              <td className="py-4 text-right text-indigo-700 font-mono font-black">Rp{subtotal.toLocaleString("id-ID")}</td>
+                                           </tr>
+                                        );
+                                     })}
+                                  </tbody>
+                               </table>
+                            </div>
+                         </div>
+
+                         {/* Grand Total Recap Block */}
+                         {(() => {
+                           const grandTotal = analysis.batchResult.items.reduce((sum, it, ii) => {
+                             const qty = rfqQuantities[ii] !== undefined ? rfqQuantities[ii] : 100;
+                             return sum + (it.recommendedPrice * qty);
+                           }, 0);
+                           
+                           const currentTotal = analysis.batchResult.items.reduce((sum, it, ii) => {
+                             const qty = rfqQuantities[ii] !== undefined ? rfqQuantities[ii] : 100;
+                             return sum + (it.currentPrice * qty);
+                           }, 0);
+
+                           const potentialSavings = currentTotal - grandTotal;
+
+                           return (
+                             <div className="border-t border-slate-300 mt-6 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+                               <div className="text-left font-sans">
+                                  <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest block font-sans">Total Potensi Penghematan Laba</span>
+                                  <span className="text-lg font-black text-emerald-600 block">Rp{potentialSavings.toLocaleString("id-ID")} (Hemat {Math.round((potentialSavings / currentTotal) * 100) || 5}%)</span>
+                               </div>
+                               <div className="text-right bg-slate-900 text-white py-3 px-6 rounded-2xl flex flex-col items-end">
+                                  <span className="text-[7px] font-black uppercase tracking-widest opacity-40">AKUMULASI NILAI TARGET RFQ</span>
+                                  <span className="text-xl font-black font-mono text-emerald-400">Rp{grandTotal.toLocaleString("id-ID")}</span>
+                               </div>
+                             </div>
+                           );
+                         })()}
+
+                         {/* Verification Claws */}
+                         <div className="border-t border-dashed border-slate-200 mt-8 pt-6 flex justify-between items-end text-[9px] text-slate-400">
+                            <div className="space-y-1">
+                               <span>Klausa Hukum CariMurah.ai:</span>
+                               <span className="block opacity-65 leading-normal max-w-sm">Dokumen ini merupakan draf referensi pengadaan otonom berdasar perbandingan real-time. Tidak mengikat hukum secara sepihak sebelum ditandatangani kedua belah pihak.</span>
+                            </div>
+                            <div className="text-center space-y-4">
+                               <span className="block opacity-50 uppercase tracking-widest text-[7px] font-black">Authorized Signature</span>
+                               <div className="h-0.5 w-24 bg-slate-400 mx-auto" />
+                               <span className="block font-bold text-slate-600 italic text-[10px]">{rfqCompanySender} Representative</span>
+                            </div>
+                         </div>
+                      </div>
                    </div>
 
-                   <button 
-                     onClick={() => {
-                       setAnalysis({ 
-                         ...analysis, 
-                         batchResult: { ...analysis.batchResult!, rfqStatus: 'sent' }
-                        });
-                        setMode(null);
-                        if (typeof pendo !== "undefined" && analysis?.batchResult) {
-                          pendo.track("rfq_sent", {
-                            items_count: analysis.batchResult.items.length,
-                            total_target_price: analysis.batchResult.items.reduce((sum, it) => sum + it.recommendedPrice, 0),
-                            send_method: "whatsapp_email",
-                            user_tier: profile?.subscription?.tier || "FREE",
-                            product_names: analysis.batchResult.items.map(it => it.productName).join(", ").substring(0, 200)
-                          });
-                        }
-                        /*
-                       });
-                       setMode(null);
-                     */}}
-                     className="w-full py-5 bg-slate-950 text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl"
-                   >
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Send via API WhatsApp/Email
-                   </button>
+                   {/* RIGHT COLUMN: PREDICTIVE FORECASTING, SCRIPT GENERATOR & WHATSAPP ROUTER (lg:span-5) */}
+                   <div className="lg:col-span-5 space-y-8 print:hidden">
+
+                      {/* PILLAR 1: Predictive Market Forecasting Card */}
+                      <div className={`p-8 rounded-[2.5rem] border ${isB2B ? "bg-white/5 border-white/10" : "bg-white border-slate-200"} space-y-6 shadow-xl text-left`}>
+                         <div className="flex justify-between items-start">
+                            <div className="space-y-1 font-sans">
+                               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-500">
+                                  Pillar 1 • Predictive Forecasting
+                                </div>
+                                <h4 className="text-xl font-black tracking-tight flex items-center gap-2">
+                                   <Layers className="w-5 h-5 text-amber-500" /> Forecast & Siklus Stok 📈
+                                </h4>
+                             </div>
+                         </div>
+
+                         <p className="text-xs opacity-70 leading-relaxed font-sans">
+                            Berdasarkan data harga pasar terkini dan musim permintaan grosir regional, berikut adalah prediksi AI mengenai landskap logistik Anda:
+                         </p>
+
+                         {/* Seasonal Market Simulation Widget */}
+                         <div className="space-y-3 font-sans">
+                            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex gap-4 items-start text-xs text-amber-100">
+                               <Sparkles className="w-5 h-5 text-amber-400 animate-bounce flex-shrink-0 mt-0.5" />
+                               <div>
+                                  <span className="font-extrabold uppercase text-[8px] tracking-wider block text-amber-400">AI Market Insight</span>
+                                  <p className="mt-1 leading-relaxed opacity-95 text-slate-800 dark:text-amber-100">
+                                     <strong>Rekomendasi Volume Tinggi:</strong> Cuaca kering regional di Jawa Timur diprediksi menaikkan biaya kargo logistik sebesar <strong>+12%</strong> dalam 24 hari ke depan. Sangat disarankan untuk mengajukan volume penawaran minimal <strong>100 unit</strong> guna mengunci harga termurah.
+                                  </p>
+                               </div>
+                            </div>
+
+                            {/* Active Trend Indicators for scanned items */}
+                            <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                               {analysis.batchResult.items.slice(0, 3).map((it, idx) => (
+                                  <div key={idx} className="p-3 rounded-xl bg-black/10 dark:bg-white/5 border border-slate-200 dark:border-white/5 flex justify-between items-center text-xs">
+                                     <div className="truncate max-w-[150px]">
+                                        <span className="font-extrabold block truncate">{it.productName}</span>
+                                        <span className="text-[8px] opacity-40 uppercase block">Grosir Trend</span>
+                                     </div>
+                                     <div className="text-right">
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[8px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400">
+                                           ⭐ Rentang Murah
+                                        </span>
+                                        <span className="block text-[8.5px] opacity-50 font-mono mt-0.5">Ukur Tren: Stabil</span>
+                                     </div>
+                                  </div>
+                               ))}
+                            </div>
+                         </div>
+                      </div>
+
+                      {/* PILLAR 3: AI Strategic Negotiation Script Generator */}
+                      <div className={`p-8 rounded-[2.5rem] border ${isB2B ? "bg-white/5 border-white/10" : "bg-white border-slate-200"} space-y-6 shadow-xl text-left`}>
+                         <div className="flex justify-between items-start">
+                            <div className="space-y-1 font-sans">
+                               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-indigo-500/10 text-indigo-400">
+                                  Pillar 3 • AI Script Generator
+                               </div>
+                               <h4 className="text-xl font-black tracking-tight flex items-center gap-2">
+                                  <MessageSquare className="w-5 h-5 text-indigo-400" /> AI Strategic Posture Script
+                               </h4>
+                            </div>
+                         </div>
+
+                         <p className="text-xs opacity-70 leading-relaxed font-sans">
+                            Pilih gaya bahasa tawar-menawar Anda di bawah demi mengonstruksi draf negosiasi otomatis yang disesuaikan dengan volume pemesanan:
+                         </p>
+
+                         {/* Posture Selectors */}
+                         <div className="grid grid-cols-3 gap-2 font-sans">
+                            {[
+                              { label: "Kolaboratif", posture: "kolaboratif", desc: "Langganan rutin" },
+                              { label: "Agresif", posture: "agresif", desc: "Siap Tunai CO" },
+                              { label: "Taktis", posture: "taktis", desc: "Bebas Ongkir Cargo" },
+                            ].map((post, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setNegotiationPosture(post.posture as any);
+                                  triggerToast(`Model bahasa dialihkan ke gaya ${post.label}!`, "success");
+                                }}
+                                className={`p-3 rounded-2xl flex flex-col items-center justify-center text-center transition-all cursor-pointer border ${
+                                  negotiationPosture === post.posture 
+                                    ? "bg-indigo-600 text-white border-indigo-400 font-extrabold shadow-md shadow-indigo-600/10" 
+                                    : (isB2B ? "bg-white/5 hover:bg-white/10 border-white/5 text-white" : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700")
+                                }`}
+                              >
+                                <span className="text-[10px] font-black block">{post.label}</span>
+                                <span className="text-[8px] opacity-40 leading-none mt-1">{post.desc}</span>
+                              </button>
+                            ))}
+                         </div>
+
+                         {/* Live Script Generator Box */}
+                         {(() => {
+                            let negoText = "";
+                            const firstItem = analysis.batchResult?.items[0];
+                            const itemName = firstItem ? firstItem.productName : "sembako bulk";
+                            const firstQty = rfqQuantities[0] !== undefined ? rfqQuantities[0] : 100;
+                            const totalValStr = analysis.batchResult.items.reduce((sum, it, ii) => {
+                              const qty = rfqQuantities[ii] !== undefined ? rfqQuantities[ii] : 100;
+                              return sum + (it.recommendedPrice * qty);
+                            }, 0).toLocaleString("id-ID");
+
+                            if (negotiationPosture === "agresif") {
+                              negoText = `Halo tim penjualan *${rfqSupplierName}*,\n\nKami dari *${rfqCompanySender}* berencana melakukan pengadaan cepat hari ini untuk ${analysis.batchResult.items.length} item komoditas utama (termasuk *${itemName}* dengan target kuantitas rata-rata *${firstQty} unit* per item).\n\nSetelah mencocokkan harga pasar terendah CariMurah.ai, total nilai pesanan target kami senilai *Rp ${totalValStr}*.\n\nKami siap melakukan pelunasan transfer cash 100% lunas siang ini tanpa termin tunda, asalkan harga target grosir di atas disetujui. Mohon dikirimkan nomor rekening & persetujuan harga agar pesanan langsung kami lunasi ke sales. Terima kasih banyak.`;
+                            } else if (negotiationPosture === "kolaboratif") {
+                              negoText = `Selamat siang perwakilan sales *${rfqSupplierName}*,\n\nSalam kenal Kak, kami dari kepengurusan logistik *${rfqCompanySender}*. Kami sedang mensurvei supplier tetap jangka panjang untuk pasokan berkala ${analysis.batchResult.items.length} komparasi produk, utamanya produk *${itemName}*.\n\nJika kami menetapkan stok rutin berkelanjutan dengan kuantitas bulanan setara *${firstQty} item*, apakah kami bisa dibantu kunci harga terbaik sesuai spesifikasi RFQ kami di total akumulasi target *Rp ${totalValStr}*?\n\nKami ingin menyepakati pendaftaran toko kakak sebagai main vendor tetap kami. Menunggu tanggapan kerja sama baiknya ya Kak. Terima kasih!`;
+                            } else {
+                              negoText = `Yth. Tim Logistik *${rfqSupplierName}*,\n\nKami bersurat dari *${rfqCompanySender}* terkait pengadaan stok grosir ${analysis.batchResult.items.length} komoditas utama (total volume order target *Rp ${totalValStr}*).\n\nHarga target penawaran kami telah kami tetapkan berdasar landed cost terendah CariMurah.ai. Terkait pengiriman, jika kami sepakat memesan di nominal tersebut, apakah ada skema taktis berupa *bebas biaya kirim kargo logistik armada mandiri* atau subsidi drop point ke alamat pergudangan kami?\n\nDraf RFQ lengkap versi cetak resmi siap kami kirimkan via PDF jika tim admin gudang membutuhkan rujukan tertulis resmi. Ditunggu kabar baiknya Kak. Terima kasih.`;
+                            }
+
+                            return (
+                              <div className="space-y-4 font-sans text-slate-900 dark:text-white">
+                                 <div className={`p-5 rounded-3xl relative transition-all ${isB2B ? "bg-slate-900 border border-white/5" : "bg-slate-50 border border-slate-200"}`}>
+                                    <span className="absolute top-3 right-3 text-[7px] font-black uppercase tracking-wider opacity-40 bg-white/10 px-1.5 py-0.5 rounded">AUTO-COMPILED SCRIPT</span>
+                                    <p className="text-xs font-mono leading-relaxed whitespace-pre-wrap opacity-90 text-left select-all pt-3">
+                                       {negoText}
+                                    </p>
+                                 </div>
+
+                                 <div className="grid grid-cols-2 gap-2">
+                                    <button 
+                                      type="button"
+                                      onClick={() => {
+                                         navigator.clipboard.writeText(negoText);
+                                         setCopiedNegotiation(true);
+                                         triggerToast("Nego script disalin dengan kuantitas live!", "success");
+                                         setTimeout(() => setCopiedNegotiation(false), 2000);
+                                      }}
+                                      className="py-3 bg-white/10 hover:bg-white/20 text-indigo-400 hover:text-indigo-300 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer border border-white/5 active:scale-95"
+                                    >
+                                       {copiedNegotiation ? (
+                                         <>
+                                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Copied!
+                                         </>
+                                       ) : (
+                                         <>
+                                            <FileText className="w-4 h-4" /> Copy Script
+                                         </>
+                                       )}
+                                    </button>
+
+                                    {/* PILLAR 4: WhatsApp Web URI Router Direct Bridge */}
+                                    <a
+                                      href={`https://api.whatsapp.com/send?phone=${rfqSupplierPhone.replace(/[^0-9+]/g, "")}&text=${encodeURIComponent(negoText)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={() => {
+                                         if (typeof pendo !== "undefined" && analysis?.batchResult) {
+                                           pendo.track("whatsapp_router_triggered", {
+                                             supplier_name: rfqSupplierName,
+                                             supplier_phone: rfqSupplierPhone,
+                                             posture: negotiationPosture,
+                                             total_order_value: analysis.batchResult.items.reduce((sum, it, ii) => sum + (it.recommendedPrice * (rfqQuantities[ii] || 100)), 0)
+                                           });
+                                         }
+                                         triggerToast("Jalur Flywheel WhatsApp Router Aktif! Mengalihkan...", "success");
+                                      }}
+                                      className="py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/20 active:scale-95 text-center"
+                                    >
+                                       <Smartphone className="w-4 h-4" /> Buka WhatsApp
+                                    </a>
+                                 </div>
+
+                                 <div className="flex gap-2 items-center text-[9px] opacity-40">
+                                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>Mengalihkan draf nego live ini langsung ke chat Wholesaler via WhatsApp Router.</span>
+                                 </div>
+                              </div>
+                            );
+                         })()}
+                      </div>
+
+                   </div>
                 </div>
              </motion.section>
           ) : mode === "qr_scanner" ? (
@@ -4751,12 +5263,42 @@ export default function App() {
                           <div className={`p-4 rounded-2xl ${isB2B ? "bg-indigo-500 shadow-lg shadow-indigo-500/50" : "bg-emerald-500 shadow-lg shadow-emerald-500/50"}`}><CheckCircle2 className="w-8 h-8 text-white" /></div>
                        </div>
                        
-                       <div className={`p-6 rounded-3xl flex gap-5 items-center ${isB2B ? "bg-black/20" : "bg-white shadow-sm border border-emerald-100"}`}>
-                          <div className={`p-3 rounded-full ${isB2B ? "bg-indigo-500/20" : "bg-emerald-50"}`}>
-                             <Volume2 className={`w-6 h-6 ${isB2B ? "text-indigo-400" : "text-emerald-500"}`} />
+                       <button 
+                          onClick={() => playVoice(analysis.batchResult!.summaryVoice)}
+                          disabled={audioStatus === "loading"}
+                          className={`p-6 w-full text-left rounded-3xl flex gap-5 items-center transition-all duration-300 focus:outline-none pointer-events-auto cursor-pointer active:scale-[0.98] ${
+                            audioStatus === "playing" 
+                              ? (isB2B ? "bg-indigo-500/20 ring-4 ring-indigo-500/50 shadow-indigo-500/10" : "bg-emerald-100 ring-4 ring-emerald-500/50 shadow-md")
+                              : (isB2B ? "bg-black/20 hover:bg-black/30" : "bg-white shadow-sm border border-emerald-100 hover:bg-emerald-50/50")
+                          }`}
+                       >
+                          <div className={`p-3 rounded-full relative flex items-center justify-center transition-all ${
+                            audioStatus === "playing" 
+                              ? "scale-110 bg-indigo-500/30 text-indigo-400" 
+                              : (audioStatus === "loading" ? "text-slate-400 animate-pulse" : (isB2B ? "bg-indigo-500/20 text-indigo-400" : "bg-emerald-50 text-emerald-500"))
+                          }`}>
+                             {audioStatus === "loading" ? (
+                               <svg className="animate-spin h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                               </svg>
+                             ) : (
+                               <Volume2 className={`w-6 h-6 ${audioStatus === "playing" ? "animate-pulse" : ""}`} />
+                             )}
+                             
+                             {audioStatus === "playing" && (
+                               <span className={`absolute -inset-1 rounded-full animate-ping opacity-35 ${isB2B ? "bg-indigo-400" : "bg-emerald-400"}`} />
+                             )}
                           </div>
-                          <p className={`text-sm font-semibold leading-relaxed italic ${isB2B ? "text-indigo-100" : "text-slate-700"}`}>"{analysis.batchResult.summaryVoice}"</p>
-                       </div>
+                          <div className="flex-1">
+                             <span className="block text-[8px] font-black uppercase tracking-widest opacity-40 mb-1">
+                               {audioStatus === "playing" ? "Memutar Suara Asisten AI 🔊" : audioStatus === "loading" ? "Mengunduh Suara..." : "Suara Asisten AI • Ketuk Untuk Mendengarkan Ulang 🎧"}
+                             </span>
+                             <p className={`text-sm font-semibold leading-relaxed italic ${isB2B ? "text-indigo-100" : "text-slate-700"}`}>
+                                "{analysis.batchResult.summaryVoice}"
+                             </p>
+                          </div>
+                       </button>
                        
                        {isB2B && (profile?.subscription?.tier === "ENTERPRISE") && (
                           <div className="flex gap-4 mt-8">

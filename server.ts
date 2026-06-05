@@ -1216,6 +1216,7 @@ const ai = new GoogleGenAI({
 app.post("/api/tts", async (req, res) => {
   try {
     const { text, voice = "Zephyr" } = req.body;
+    console.log("[TTS Request] Generating voice synthesis. Voice name:", voice, "| Text preview:", text ? `"${text.substring(0, 60)}..."` : "empty");
     
     // Using the modern Gemini TTS model for studio-quality voices
     const response = await ai.models.generateContent({
@@ -1234,13 +1235,14 @@ app.post("/api/tts", async (req, res) => {
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (base64Audio) {
+      console.log("[TTS Success] Successfully synthesized voice. Audio data size:", base64Audio.length, "characters of base64.");
       // Returning raw PCM (24000Hz) data
       res.json({ audio: base64Audio, rate: 24000 });
     } else {
-      throw new Error("No audio data returned");
+      throw new Error("No audio data returned from Gemini TTS API representation");
     }
   } catch (error: any) {
-    console.error("TTS Error:", error);
+    console.error("[TTS Error] Failed playing or synthesizing voice:", error);
     let message = error.message || "No audio data returned";
     if (message.includes("prepayment credits") || message.includes("RESOURCE_EXHAUSTED") || message.includes("credits are depleted") || message.includes("429")) {
       message = "Kredit prabayar Google AI Studio habis. Gagal memutar suara Zephyr.";
