@@ -521,11 +521,11 @@ export default function App() {
       setShowOnboarding(true);
     }
 
-    // Load or initialize daily quota scans
-    const today = new Date().toISOString().split('T')[0];
-    const lastScanDate = localStorage.getItem("carimurah_last_scan_date");
-    if (lastScanDate !== today) {
-      localStorage.setItem("carimurah_last_scan_date", today);
+    // Load or initialize monthly quota scans
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const lastScanMonth = localStorage.getItem("carimurah_last_scan_month");
+    if (lastScanMonth !== currentMonth) {
+      localStorage.setItem("carimurah_last_scan_month", currentMonth);
       localStorage.setItem("carimurah_daily_scans", "0");
       setDailyScansCount(0);
     } else {
@@ -546,7 +546,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("carimurah_extra_credits", extraCredits.toString());
-  }, [extraCredits]);
+    if (user) {
+      updateProfile(user.uid, { extraCredits });
+    }
+  }, [extraCredits, user]);
 
   const handleQuickAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -626,6 +629,12 @@ export default function App() {
   const [midtransData, setMidtransData] = useState<{ token?: string; redirect_url?: string; isMock?: boolean } | null>(null);
 
   const initiateMidtransPayment = async (plan: "PRO" | "ENTERPRISE" | "SACHET5" | "SACHET15" | "WEEKLY_SAVER") => {
+    if (!user) {
+      triggerToast("Harap login/daftar akun terlebih dahulu untuk melakukan pembelian paket agar status tier & kredit Anda tersinkronisasi lintas platform!", "error");
+      handleLoginClick();
+      return;
+    }
+
     setPaymentPlan(plan);
     setPaymentMethod("qris");
     setPaymentStep("method");
@@ -634,8 +643,8 @@ export default function App() {
     setShowPaymentModal(true);
     setPaymentLog(["Menginisialisasi CariMurah secure checkout...", "Menghubungi server host..."]);
 
-    const callerUid = user?.uid || "guest-" + Date.now();
-    const callerEmail = user?.email || "guest@carimurah.ai";
+    const callerUid = user.uid;
+    const callerEmail = user.email || "user@carimurah.ai";
 
     try {
       const resp = await fetch("/api/payment/create", {
@@ -864,6 +873,35 @@ export default function App() {
       setUser(activeUser);
       loadHistoryFromDB(activeUser.uid);
       const p = await getUserProfile(activeUser.uid);
+      
+      // Sync monthly scans across platforms on manual login
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      if (p) {
+        if (typeof p.extraCredits === 'number') {
+          setExtraCredits(p.extraCredits);
+        } else {
+          const localCredits = parseInt(localStorage.getItem("carimurah_extra_credits") || "0", 10);
+          if (localCredits > 0) {
+            updateProfile(activeUser.uid, { extraCredits: localCredits });
+          }
+        }
+        if (p.lastScanMonth === currentMonth) {
+          const sc = p.monthlyScansCount || 0;
+          setDailyScansCount(sc);
+          localStorage.setItem("carimurah_daily_scans", sc.toString());
+          localStorage.setItem("carimurah_last_scan_month", currentMonth);
+        } else {
+          setDailyScansCount(0);
+          localStorage.setItem("carimurah_daily_scans", "0");
+          localStorage.setItem("carimurah_last_scan_month", currentMonth);
+          updateProfile(activeUser.uid, { lastScanMonth: currentMonth, monthlyScansCount: 0 });
+        }
+      } else {
+        const localCredits = parseInt(localStorage.getItem("carimurah_extra_credits") || "0", 10);
+        if (localCredits > 0) {
+          updateProfile(activeUser.uid, { extraCredits: localCredits });
+        }
+      }
       setProfile(p || {
         uid: activeUser.uid,
         displayName: activeUser.displayName || sandboxName || "User Demo",
@@ -902,6 +940,8 @@ export default function App() {
     setUser(null);
     setProfile(DEFAULT_GUEST_PROFILE);
     setHistory([]);
+    setExtraCredits(0);
+    localStorage.removeItem("carimurah_extra_credits");
     try {
       await firebaseLogout();
     } catch (err) {
@@ -985,6 +1025,9 @@ export default function App() {
            const newCount = dailyScansCount + 1;
            setDailyScansCount(newCount);
            localStorage.setItem("carimurah_daily_scans", newCount.toString());
+           if (user) {
+             updateProfile(user.uid, { monthlyScansCount: newCount, lastScanMonth: new Date().toISOString().slice(0, 7) });
+           }
          }
        }
       
@@ -1038,7 +1081,36 @@ export default function App() {
       if (u) {
         loadHistoryFromDB(u.uid);
         const p = await getUserProfile(u.uid);
-        setProfile(p || { ...DEFAULT_GUEST_PROFILE, uid: u.uid, displayName: u.displayName || "User", email: u.email });
+        
+        // Sync monthly scans across platforms
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        if (p) {
+          if (typeof p.extraCredits === 'number') {
+            setExtraCredits(p.extraCredits);
+          } else {
+            const localCredits = parseInt(localStorage.getItem("carimurah_extra_credits") || "0", 10);
+            if (localCredits > 0) {
+              updateProfile(u.uid, { extraCredits: localCredits });
+            }
+          }
+          if (p.lastScanMonth === currentMonth) {
+            const sc = p.monthlyScansCount || 0;
+            setDailyScansCount(sc);
+            localStorage.setItem("carimurah_daily_scans", sc.toString());
+            localStorage.setItem("carimurah_last_scan_month", currentMonth);
+          } else {
+            setDailyScansCount(0);
+            localStorage.setItem("carimurah_daily_scans", "0");
+            localStorage.setItem("carimurah_last_scan_month", currentMonth);
+            updateProfile(u.uid, { lastScanMonth: currentMonth, monthlyScansCount: 0 });
+          }
+        } else {
+          const localCredits = parseInt(localStorage.getItem("carimurah_extra_credits") || "0", 10);
+          if (localCredits > 0) {
+            updateProfile(u.uid, { extraCredits: localCredits });
+          }
+        }
+        setProfile(p || { ...DEFAULT_GUEST_PROFILE, uid: u.uid, displayName: u.displayName || "User", email: u.email, extraCredits: parseInt(localStorage.getItem("carimurah_extra_credits") || "0", 10) });
         if (typeof pendo !== "undefined") {
           pendo.identify({
             visitor: {
@@ -1326,6 +1398,9 @@ export default function App() {
           const newCount = dailyScansCount + 1;
           setDailyScansCount(newCount);
           localStorage.setItem("carimurah_daily_scans", newCount.toString());
+          if (user) {
+            updateProfile(user.uid, { monthlyScansCount: newCount, lastScanMonth: new Date().toISOString().slice(0, 7) });
+          }
         }
       }
 
@@ -2708,7 +2783,7 @@ export default function App() {
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider active:scale-95 transition-transform mt-3 cursor-pointer"
                       >
                         <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Sisa Kuota Harian AI: {Math.max(0, 3 - dailyScansCount)} / 3 Gratis{extraCredits > 0 ? ` (+${extraCredits} Kredit Bonus)` : ""} • Upgrade ke Pro</span>
+                        <span>Sisa Kuota Bulanan AI: {Math.max(0, 3 - dailyScansCount)} / 3 Gratis{extraCredits > 0 ? ` (+${extraCredits} Kredit Bonus)` : ""} • Upgrade ke Pro</span>
                         <ChevronRight className="w-3 h-3 text-amber-500" />
                       </button>
                     )}
@@ -5309,7 +5384,7 @@ export default function App() {
                   <div className="space-y-2">
                     <h3 className="text-2xl font-black tracking-tight text-balance">Batas 3 Scan Gratis Tercapai!</h3>
                     <p className="text-xs opacity-60 leading-relaxed max-w-sm mx-auto">
-                      Kamu telah menggunakan jatah 3 scan produk harian gratis kamu. Upgrade akunmu, top up sachet murah, atau selesaikan misi sponsor gratis di bawah ini untuk lanjut!
+                      Kamu telah menggunakan jatah 3 scan produk bulanan gratis kamu. Upgrade akunmu, top up sachet murah, atau selesaikan misi sponsor gratis di bawah ini untuk lanjut!
                     </p>
                   </div>
 

@@ -114,6 +114,9 @@ export interface UserProfile {
     tier: SubscriptionTier;
     expiresAt?: string;
   };
+  extraCredits?: number;
+  monthlyScansCount?: number;
+  lastScanMonth?: string;
   preferences: {
     currency: 'IDR' | 'USD' | 'MYR';
     language: 'id' | 'en';
