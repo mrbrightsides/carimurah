@@ -418,6 +418,7 @@ export default function App() {
   
   // Onboarding Modal state
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [tourStep, setTourStep] = useState<number | null>(null);
 
   // Daily quota indicators (3 scans per day)
   const [dailyScansCount, setDailyScansCount] = useState<number>(0);
@@ -702,26 +703,103 @@ export default function App() {
     setIsSimulatingPayment(true);
     setPaymentLog(prev => [...prev, "Menghubungi payment gateway...", "Mengonfigurasi signature aman..."]);
     
-    // Simulate steps
+    // Check real DB status first if we are connected to a real live checkout
+    if (midtransData && !midtransData.isMock) {
+      if (!user) {
+        setPaymentLog(prev => [...prev, "❌ Error: ID Pengguna tidak ditemukan. Silakan masuk terlebih dahulu."]);
+        setIsSimulatingPayment(false);
+        triggerToast("Silakan masuk atau buat akun terlebih dahulu untuk memproses pembayaran.", "error");
+        return;
+      }
+
+      setPaymentLog(prev => [...prev, "Memverifikasi status webhook di database CariMurah..."]);
+      try {
+        const p = await getUserProfile(user.uid);
+        if (p) {
+          const isProRealMatch = paymentPlan === "PRO" && p.subscription?.tier === "PRO";
+          const isEntRealMatch = paymentPlan === "ENTERPRISE" && p.subscription?.tier === "ENTERPRISE";
+          const isSac5RealMatch = paymentPlan === "SACHET5" && typeof p.extraCredits === 'number' && p.extraCredits > extraCredits;
+          const isSac15RealMatch = paymentPlan === "SACHET15" && typeof p.extraCredits === 'number' && p.extraCredits > extraCredits;
+          const isWklRealMatch = paymentPlan === "WEEKLY_SAVER" && typeof p.extraCredits === 'number' && p.extraCredits > extraCredits;
+
+          if (isProRealMatch || isEntRealMatch || isSac5RealMatch || isSac15RealMatch || isWklRealMatch) {
+            setPaymentLog(prev => [
+              ...prev,
+              "✅ Pembayaran Anda berhasil divalidasi oleh otomatisasi webhook real-time!",
+              "Mensinkronisasikan profil sinkron lintasan..."
+            ]);
+            setProfile(p);
+            if (typeof p.extraCredits === "number") {
+              setExtraCredits(p.extraCredits);
+            }
+            setIsSimulatingPayment(false);
+            setPaymentStep("success");
+            triggerToast("Sukses! Pembayaran Anda berhasil terdeteksi dan diaktifkan secara instan!", "success");
+            return;
+          } else {
+            setPaymentLog(prev => [
+              ...prev,
+              "⌛ Response otomatis (webhook) belum masuk dari server Midtrans.",
+              "Silakan selesaikan pembayaran di portal Midtrans terlebih dahulu.",
+              "Jika Anda telah membayar, mohon tunggu 5-10 detik lalu ketuk kembali tombol aktifkan premium."
+            ]);
+            setIsSimulatingPayment(false);
+            triggerToast("Pembayaran belum terdeteksi. Silakan selesaikan pembayaran Anda di portal Midtrans.", "warning");
+            return; // Prevent simulation fallback to keep production secure
+          }
+        } else {
+          setPaymentLog(prev => [
+            ...prev,
+            "⌛ Profil Anda tidak ditemukan di database.",
+            "Lakukan pencarian produk terlebih dahulu sebelum melakukan pembayaran agar akun terdaftar secara otomatis."
+          ]);
+          setIsSimulatingPayment(false);
+          return;
+        }
+      } catch (err) {
+        console.error("Real DB check failed:", err);
+        setPaymentLog(prev => [...prev, "⚠️ Gagal terhubung ke database CariMurah saat sinkronisasi."]);
+        setIsSimulatingPayment(false);
+        triggerToast("Gagal memverifikasi status pembayaran. Silakan coba lagi.", "error");
+        return; // Prevent simulation fallback
+      }
+    }
+
+    // Simulate steps fallback
     setTimeout(() => {
       setPaymentLog(prev => [...prev, "Proses validasi saldo/rekening target...", "Skenario dana berhasil diserap."]);
     }, 600);
 
     setTimeout(() => {
-      setPaymentLog(prev => [...prev, "Menyesuaikan state langganan di MongoDB Cloud...", "Proses update profile..."]);
+      setPaymentLog(prev => [...prev, "Menyesuaikan state langganan di database...", "Proses update profile..."]);
     }, 1200);
 
     setTimeout(() => {
       const tierChosen = paymentPlan || "PRO";
       
       if (tierChosen === "SACHET5") {
-        setExtraCredits(prev => prev + 5);
+        setExtraCredits(prev => {
+          const nextVal = prev + 5;
+          localStorage.setItem("carimurah_extra_credits", nextVal.toString());
+          if (user) updateProfile(user.uid, { extraCredits: nextVal });
+          return nextVal;
+        });
         setPaymentLog(prev => [...prev, "Selesai! 5 Kredit Scan telah didepositkan ke akun Anda!"]);
       } else if (tierChosen === "SACHET15") {
-        setExtraCredits(prev => prev + 15);
+        setExtraCredits(prev => {
+          const nextVal = prev + 15;
+          localStorage.setItem("carimurah_extra_credits", nextVal.toString());
+          if (user) updateProfile(user.uid, { extraCredits: nextVal });
+          return nextVal;
+        });
         setPaymentLog(prev => [...prev, "Selesai! 15 Kredit Scan telah didepositkan ke akun Anda!"]);
       } else if (tierChosen === "WEEKLY_SAVER") {
-        setExtraCredits(prev => prev + 100);
+        setExtraCredits(prev => {
+          const nextVal = prev + 100;
+          localStorage.setItem("carimurah_extra_credits", nextVal.toString());
+          if (user) updateProfile(user.uid, { extraCredits: nextVal });
+          return nextVal;
+        });
         setPaymentLog(prev => [...prev, "Selesai! Weekly Saver Pass Aktif, 100 Kredit Scan telah didepositkan ke akun Anda!"]);
       } else {
         const durationMs = tierChosen === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
@@ -2085,7 +2163,20 @@ export default function App() {
                   </>
                 )}
              </div>
-             <button onClick={() => setMode(mode === "dashboard" ? null : "dashboard")} className="p-2 opacity-60 hover:opacity-100 transition-opacity">
+             <button 
+               id="tour-dashboard-btn"
+               onClick={() => setMode(mode === "dashboard" ? null : "dashboard")} 
+               className={`p-2 relative transition-all duration-300 ${
+                 tourStep === 3 
+                   ? "opacity-100 ring-4 ring-indigo-500 ring-offset-4 ring-offset-slate-950 scale-110 rounded-full bg-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.8)] z-50" 
+                   : "opacity-60 hover:opacity-100"
+               }`}
+             >
+                {tourStep === 3 && (
+                  <div className="absolute top-10 right-0 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white bg-indigo-500 rounded-full shadow-md animate-bounce z-[60] whitespace-nowrap">
+                    Langkah 3: Dashboard 📊
+                  </div>
+                )}
                 <PieChart className="w-5 h-5" />
              </button>
              {user ? (
@@ -2680,6 +2771,29 @@ export default function App() {
                            </button>
                         </div>
                      </div>
+
+                     <div className="flex items-center gap-4 opacity-80 pt-6 border-t border-dashed">
+                        <Sparkles className="w-6 h-6 text-indigo-500 animate-pulse" />
+                        <div className="flex-1 flex justify-between items-center">
+                           <div>
+                              <span className="block text-[10px] font-black uppercase tracking-widest opacity-40">Bantuan & Panduan</span>
+                              <span className="font-bold text-xs sm:text-sm">Mulai Tur Panduan Fitur</span>
+                           </div>
+                           <button 
+                            onClick={() => {
+                              setShowSettings(false);
+                              setMode(null);
+                              setTourStep(1);
+                              triggerToast("Memulai Tur Panduan CariMurah...", "info");
+                            }}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest text-white transition-all cursor-pointer active:scale-95 ${
+                              isB2B ? "bg-indigo-600 hover:bg-indigo-700" : "bg-emerald-500 hover:bg-emerald-600"
+                            }`}
+                           >
+                              Mulai Tur
+                           </button>
+                        </div>
+                     </div>
                   </div>
 
                   {/* AI Compliance Disclaimer Section */}
@@ -2809,7 +2923,24 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <button onClick={startCamera} className={`col-span-3 h-28 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-emerald-500 text-white shadow-emerald-500/20"}`}>
+                <button 
+                  id="tour-scan-btn"
+                  onClick={startCamera} 
+                  className={`col-span-3 h-28 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-2xl relative ${
+                    isB2B ? "bg-white text-slate-950 shadow-white/5" : "bg-emerald-500 text-white shadow-emerald-500/20"
+                  } ${
+                    tourStep === 1 
+                      ? (isB2B 
+                          ? "ring-4 ring-indigo-500 ring-offset-4 ring-offset-slate-950 scale-[1.03] shadow-[0_0_30px_rgba(99,102,241,0.8)] z-50" 
+                          : "ring-4 ring-emerald-500 ring-offset-4 ring-offset-white scale-[1.03] shadow-[0_0_30px_rgba(16,185,129,0.8)] z-50")
+                      : ""
+                  }`}
+                >
+                  {tourStep === 1 && (
+                    <div className={`absolute -top-3 left-6 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white rounded-full ${isB2B ? "bg-indigo-500" : "bg-emerald-500"} shadow-lg animate-bounce z-50`}>
+                      Langkah 1: Kamera AI Scan 📸
+                    </div>
+                  )}
                   <Camera className="w-9 h-9" />
                   <div className="text-center">
                     <span className="block font-bold text-base tracking-tight leading-tight">Kamera AI Scan</span>
@@ -2817,7 +2948,22 @@ export default function App() {
                   </div>
                 </button>
 
-                <button onClick={startQrScanner} className={`col-span-3 h-28 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-2xl ${isB2B ? "bg-indigo-600 text-white shadow-indigo-600/20" : "bg-amber-500 text-white shadow-amber-500/20"}`}>
+                <button 
+                  id="tour-qr-btn"
+                  onClick={startQrScanner} 
+                  className={`col-span-3 h-28 rounded-[2.5rem] flex flex-col items-center justify-center gap-2 transition-all active:scale-95 shadow-2xl relative ${
+                    isB2B ? "bg-indigo-600 text-white shadow-indigo-600/20" : "bg-amber-500 text-white shadow-amber-500/20"
+                  } ${
+                    tourStep === 2 
+                      ? "ring-4 ring-amber-500 ring-offset-4 ring-offset-slate-950 scale-[1.03] shadow-[0_0_30px_rgba(245,158,11,0.8)] z-50" 
+                      : ""
+                  }`}
+                >
+                  {tourStep === 2 && (
+                    <div className="absolute -top-3 left-6 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white bg-amber-500 rounded-full shadow-lg animate-bounce z-50">
+                      Langkah 2: QR Scanner 🔍
+                    </div>
+                  )}
                   <QrCode className="w-8 h-8" />
                   <div className="text-center">
                     <span className="block font-bold text-base tracking-tight leading-tight">QR Scanner</span>
@@ -5057,6 +5203,7 @@ export default function App() {
                    onClick={() => {
                      localStorage.setItem("carimurah_onboarding_shown", "true");
                      setShowOnboarding(false);
+                     setTourStep(1);
                    }}
                    className={`w-full py-4 bg-gradient-to-r ${isB2B ? "from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-indigo-500/20" : "from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/20"} text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all cursor-pointer shadow-lg active:scale-95`}
                  >
@@ -5064,6 +5211,116 @@ export default function App() {
                  </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+
+        {tourStep !== null && (
+          <motion.div
+            key="onboarding-tour-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-[2px] pointer-events-none"
+          />
+        )}
+
+        {tourStep !== null && (
+          <motion.div
+            key="onboarding-tour-card"
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.95 }}
+            className={`fixed bottom-6 left-4 right-4 md:left-[calc(50%-14rem)] md:right-auto md:w-[28rem] z-[90] p-6 rounded-[2rem] border shadow-[0_20px_50px_rgba(0,0,0,0.4)] ${
+              isB2B 
+                ? "bg-slate-900 border-indigo-500/30 text-white" 
+                : "bg-white border-slate-200 text-slate-950"
+            }`}
+          >
+            <div className="flex justify-between items-start gap-4 mb-4">
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-xl ${isB2B ? "bg-indigo-500/10 text-indigo-400" : "bg-emerald-500/10 text-emerald-600"}`}>
+                  {tourStep === 1 && <Camera className="w-5 h-5" />}
+                  {tourStep === 2 && <QrCode className="w-5 h-5" />}
+                  {tourStep === 3 && <PieChart className="w-5 h-5" />}
+                </div>
+                <div>
+                  <span className={`text-[9px] font-black uppercase tracking-widest ${isB2B ? "text-indigo-400" : "text-emerald-600"}`}>
+                    PANDUAN INTUITIF • STEP {tourStep} DARI 3
+                  </span>
+                  <h4 className="font-extrabold text-sm tracking-tight text-current">
+                    {tourStep === 1 && "Kamera AI Scan 📸"}
+                    {tourStep === 2 && "QR Scanner Grosir 🔍"}
+                    {tourStep === 3 && "Smart Dashboard 📊"}
+                  </h4>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setTourStep(null);
+                  triggerToast("Tur panduan dihentikan. Selamat mengeksplorasi!", "info");
+                }}
+                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 opacity-50 hover:opacity-100 transition-all pointer-events-auto cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[11px] opacity-75 leading-relaxed mb-6 text-current">
+              {tourStep === 1 && "Langkah pertama: ketuk tombol ini untuk membuka Kamera AI. Cukup foto atau unggah struk belanja, nota retail, sachet harga, atau barcode barang Anda. Asisten AI kami akan membaca tulisan tersebut dan mencarikannya banding harga distributor termurah se-Indonesia."}
+              {tourStep === 2 && "Langkah kedua: gunakan QR Scanner eksklusif untuk memindai kode QR supplier fisik grosir Anda. Katalog persediaan akan langsung terunduh secara otonom agar Anda bisa mengecek landed cost promo dan menerbitkan RFQ penawaran!"}
+              {tourStep === 3 && "Langkah terakhir: ketuk ikon Diagram di kanan atas header untuk masuk ke Smart Dashboard analitik Anda. Di sini Anda bisa memantau total laba penghematan, riwayat pencarian, dan mencetak laporan bulanan otonom CariMurah AI!"}
+            </p>
+
+            <div className="flex items-center justify-between gap-4">
+              {/* Progress Dot Indicator */}
+              <div className="flex gap-1.5">
+                {[1, 2, 3].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setTourStep(s)}
+                    className={`h-2 rounded-full transition-all duration-300 pointer-events-auto cursor-pointer ${
+                      s === tourStep 
+                        ? `w-6 ${isB2B ? "bg-indigo-500" : "bg-emerald-500"}` 
+                        : "w-2 bg-slate-300 dark:bg-slate-700 hover:opacity-100 opacity-60"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* Step Navigation Controls */}
+              <div className="flex items-center gap-2 pointer-events-auto">
+                {tourStep > 1 && (
+                  <button
+                    onClick={() => setTourStep(prev => prev !== null ? prev - 1 : null)}
+                    className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                      isB2B 
+                        ? "border-white/10 hover:bg-white/5 text-white" 
+                        : "border-slate-200 hover:bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    Sebelumnya
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    if (tourStep < 3) {
+                      setTourStep(prev => prev !== null ? prev + 1 : null);
+                    } else {
+                      setTourStep(null);
+                      triggerToast("Hebat! Anda siap berburu harga termurah bersama CariMurah.ai! 🚀", "success");
+                    }
+                  }}
+                  className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-md cursor-pointer ${
+                    isB2B 
+                      ? "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10 text-white" 
+                      : "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/10 text-white"
+                  }`}
+                >
+                  {tourStep === 3 ? "Selesai ✨" : "Lanjut"}
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -5478,14 +5735,15 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md"
           >
-            <motion.div 
-              initial={{ scale: 0.95, y: 30 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 30 }}
-              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 text-left relative overflow-hidden my-8`}
-            >
+            <div className="flex min-h-screen items-center justify-center p-4 sm:p-6 text-center">
+              <motion.div 
+                initial={{ scale: 0.95, y: 30 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 30 }}
+                className={`max-w-md w-full p-5 sm:p-8 rounded-3xl sm:rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-4 sm:space-y-6 text-left relative overflow-hidden my-auto`}
+              >
               {/* Header section with selected plan info */}
               <div className="flex justify-between items-start border-b border-dashed pb-4 opacity-100">
                 <div className="space-y-1">
@@ -5798,7 +6056,8 @@ export default function App() {
                 </div>
               )}
             </motion.div>
-          </motion.div>
+          </div>
+        </motion.div>
         )}
 
         {/* 3. EXCLUSIVE INTERACTIVE AFFILIATE REDIRECTION MODAL */}
@@ -5808,14 +6067,15 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md"
           >
-            <motion.div 
-              initial={{ scale: 0.95, y: 30 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 30 }}
-              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 text-left relative overflow-hidden`}
-            >
+            <div className="flex min-h-screen items-center justify-center p-4 sm:p-6 text-center">
+              <motion.div 
+                initial={{ scale: 0.95, y: 30 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 30 }}
+                className={`max-w-md w-full p-5 sm:p-8 rounded-3xl sm:rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-4 sm:space-y-6 text-left relative overflow-hidden my-auto`}
+              >
               {/* Glow accent */}
               <div className="absolute -top-10 -left-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -5895,7 +6155,8 @@ export default function App() {
                 </>
               )}
             </motion.div>
-          </motion.div>
+          </div>
+        </motion.div>
         )}
 
         {/* 4. EXCLUSIVE AI AGENT AUTOMATED CHECKOUT SIMULATOR */}
@@ -5905,14 +6166,15 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md overflow-y-auto"
+            className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md"
           >
-            <motion.div 
-              initial={{ scale: 0.95, y: 30 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 30 }}
-              className={`max-w-md w-full p-8 rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 text-left relative overflow-hidden`}
-            >
+            <div className="flex min-h-screen items-center justify-center p-4 sm:p-6 text-center">
+              <motion.div 
+                initial={{ scale: 0.95, y: 30 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 30 }}
+                className={`max-w-md w-full p-5 sm:p-8 rounded-3xl sm:rounded-[3rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-4 sm:space-y-6 text-left relative overflow-hidden my-auto`}
+              >
               {/* Glow accent */}
               <div className="absolute -top-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -6062,7 +6324,8 @@ export default function App() {
                 </div>
               )}
             </motion.div>
-          </motion.div>
+          </div>
+        </motion.div>
         )}
 
         {/* Dynamic Premium Toaster Container */}

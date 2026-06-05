@@ -1143,7 +1143,19 @@ app.post("/api/payment/webhook", async (req, res) => {
       if (parts[0] === "CM") {
         const planAbbr = parts[1];
         const cleanUidPart = parts[2];
-        const plan = planAbbr === "PRO" ? "PRO" : "ENTERPRISE";
+        
+        let plan: "PRO" | "ENTERPRISE" | "SACHET5" | "SACHET15" | "WEEKLY_SAVER" | null = null;
+        if (planAbbr === "PRO") {
+          plan = "PRO";
+        } else if (planAbbr === "ENT") {
+          plan = "ENTERPRISE";
+        } else if (planAbbr === "SAC5") {
+          plan = "SACHET5";
+        } else if (planAbbr === "SAC15") {
+          plan = "SACHET15";
+        } else if (planAbbr === "WKL") {
+          plan = "WEEKLY_SAVER";
+        }
 
         // Query User document based on starting-regex match for UID
         const { db } = await connectToDatabase();
@@ -1153,15 +1165,30 @@ app.post("/api/payment/webhook", async (req, res) => {
         const userDoc = await db.collection("users").findOne({ uid: { $regex: matchRegex } });
 
         if (userDoc) {
-          const durationMs = plan === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
-          const expiresAt = new Date(Date.now() + durationMs).toISOString();
-          const subs = { tier: plan, expiresAt };
+          if (plan === "PRO" || plan === "ENTERPRISE") {
+            const durationMs = plan === "PRO" ? 30 * 24 * 60 * 60 * 1000 : 365 * 24 * 60 * 60 * 1000;
+            const expiresAt = new Date(Date.now() + durationMs).toISOString();
+            const subs = { tier: plan, expiresAt };
 
-          await db.collection("users").updateOne(
-            { uid: userDoc.uid },
-            { $set: { subscription: subs, updatedAt: new Date().toISOString() } }
-          );
-          console.log(`[Midtrans Webhook] Successfully upgraded Firebase UID ${userDoc.uid} to ${plan}`);
+            await db.collection("users").updateOne(
+              { uid: userDoc.uid },
+              { $set: { subscription: subs, updatedAt: new Date().toISOString() } }
+            );
+            console.log(`[Midtrans Webhook] Successfully upgraded Firebase UID ${userDoc.uid} to ${plan}`);
+          } else if (plan === "SACHET5" || plan === "SACHET15" || plan === "WEEKLY_SAVER") {
+            let creditsToAdd = 5;
+            if (plan === "SACHET15") creditsToAdd = 15;
+            else if (plan === "WEEKLY_SAVER") creditsToAdd = 100;
+
+            const currentCredits = userDoc.extraCredits || 0;
+            await db.collection("users").updateOne(
+              { uid: userDoc.uid },
+              { $set: { extraCredits: currentCredits + creditsToAdd, updatedAt: new Date().toISOString() } }
+            );
+            console.log(`[Midtrans Webhook] Successfully credited +${creditsToAdd} bonus scans to UID ${userDoc.uid}`);
+          } else {
+            console.warn(`[Midtrans Webhook] Untracked or invalid planAbbr: ${planAbbr}`);
+          }
         } else {
           console.warn(`[Midtrans Webhook] No matching user document found in MongoDB starting with: ${cleanUidPart}`);
         }
