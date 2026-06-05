@@ -48,9 +48,12 @@ Beli kuota sekali bayar (*pay-as-you-go*) tanpa pusing biaya bulanan berulang. P
 ### 🥇 Enterprise Tier: Procurement Pro (Rp1.490.000 / mo.)
 *   **Target**: UMKM & Corporate Procurement managers.
 *   **Features**:
+    *   **Autonomous B2B RFQ & WhatsApp Flywheel**: An end-to-end purchasing cycle executing:
+        1. **Pillar 1: Predictive Market Forecasting**: Regionally aware price risk warnings (e.g., weather-triggered cargo surcharge predictions).
+        2. **Pillar 2: Interactive RFQ Builder**: Generates printable document with live-adjustable purchasing volumes (+10/-10 or manual input) and instant margin savings logs.
+        3. **Pillar 3: AI Negotiation Posture Engine**: Live-generated scripts with adaptive postures (Collaborative/Long-term, Aggressive/Speedy Cash, Tactical/Free Freight).
+        4. **Pillar 4: Unified WhatsApp URI Router**: Seamless handoff of generated negotiation content straight to verified wholesaler partners.
     *   **B2B QR Catalog Scanner & Ledger**: Instant barcode and QR catalog translation for wholesalers. Includes a slide-out history drawer tracking the last 5 scanned records, detected item logs, and potential corporate savings.
-    *   **Autonomous RFQ Workflow**: Generates print/PDF-ready official Request for Quotation documents for bulk vendor distribution.
-    *   **AI Bargain & Negotiation Script Helper**: Generate highly tailored negotiation scripts based on posture (Collaborative, Aggressive, Tactical) to connect with WhatsApp suppliers.
     *   **Landed Cost & Logistics**: Calculates true "Apple-to-Apple" costs including bulk cargo shipping, processing, and handling fees.
     *   **Historical OCR Audit**: Scan piles of old paper invoices to identify multi-million rupiah "cash leaks" and better historical pricing options.
 
@@ -58,6 +61,7 @@ Beli kuota sekali bayar (*pay-as-you-go*) tanpa pusing biaya bulanan berulang. P
 
 ## 🛠️ Unified Core Capabilities
 
+*   **CariMurah Enterprise Flywheel Workspace**: Interactive cockpit incorporating live forecasting widgets, printable high-security business documents, on-the-fly bulk quantity configurators, dynamic posture-based renegotiation script generation, and single-click WhatsApp API routing.
 *   **Integrated B2B QR Scanner & Ledger Suite**: Uses an optimized stacked trigger layout for single-handed mobile usage. Features an overlay-based Interactive Guide (*Panduan*), a sliding scan ledger showing the last 5 successful matches (saving/items audit), and a context-aware feedback/reporting FAB directly embedded within the viewfinder.
 *   **Predictive AI Cycle Engine**: Simulates discount patterns during Payday (8% off), Double Date (15% off), or Midnight Flash Sales (20% off) dynamically.
 *   **AI Bargain Generator**: Creates customized negotiation transcripts in professional, friendly, or agressive Indonesian tones for direct Wholesaler WhatsApp chats.
@@ -106,5 +110,7 @@ Stay connected and communicate with developers and directors:
 *   **Personal Email**: [khudri@binadarma.ac.id](mailto:khudri@binadarma.ac.id)
 *   **Telegram Support**: [@khudriakhmad](https://t.me/khudriakhmad)
 *   **Discord Server**: [CariMurah Channels](https://discord.com/channels/@khudri_61362)
+
+---
 
 *Crafted for the future of Indonesian supply chain excellence and digital economy acceleration.*
