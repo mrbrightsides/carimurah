@@ -1558,7 +1558,7 @@ app.post("/api/monthly-summary", async (req, res) => {
 // Interactive AI Agent Chat Endpoint with Function Calling (Native MCP DB Interface)
 app.post("/api/agent/chat", async (req, res) => {
   try {
-    const { message, history = [], uid, isB2B } = req.body;
+    const { message, history = [], uid, isB2B, language = "id" } = req.body;
     
     // Tools declarations for Gemini
     const get_user_profile_tool = {
@@ -1609,7 +1609,18 @@ app.post("/api/agent/chat", async (req, res) => {
       ]
     }];
 
-    const systemInstruction = `Anda adalah Asisten CariMurah.ai (Asisten Cerdas CariMurah).
+    const systemInstruction = language === "en" 
+      ? `You are the CariMurah.ai AI Assistant (Smart CariMurah Assistant).
+Your job is to act as an in-app autonomous agent representing the user.
+You are directly connected to the user's MongoDB Atlas database using Model Context Protocol (MCP).
+
+BEHAVIORAL RULES:
+1. Always prioritize database-tools (Function Calling) when requested about preferences, historical savings records, profiles, or finding pricing catalogs.
+2. If the user asks to modify settings (e.g., "change B2B focus to delivery" or "turn on notifications"), invoke the 'update_user_preferences' tool and confirm once successfully saved.
+3. When calling 'search_cheapest_products', list detailed product price comparisons (e.g., Tokopedia vs Shopee vs Wholesaler/Distributors) and calculate exactly how much money they save if they purchase from the winner. Format as a clean, highly structured Markdown table.
+4. Answer in friendly, warm, savings-enthusiastic, and professional English.
+5. Use beautiful Markdown styling, rich typography, bullets, and functional emojis.`
+      : `Anda adalah Asisten CariMurah.ai (Asisten Cerdas CariMurah).
 Tugas Anda adalah memposisikan diri sebagai agen otonom yang berjalan langsung di dalam aplikasi (in-app agent).
 Anda terhubung langsung ke database MongoDB Atlas pengguna menggunakan protokol server-internal MCP (Model Context Protocol).
 

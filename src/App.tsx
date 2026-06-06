@@ -377,6 +377,33 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     scanBarcodeButton: "Pindai Barcode / QR",
     batchRfqButton: "Rancang RFQ Otonom (+)",
     emptyHistory: "Belum ada riwayat pencarian. Yuk, mulai cari atau scan produk!",
+    asistenTitle: "Asisten CariMurah AI",
+    asistenSubtitle: "Tanya Asisten AI & Cari di Database",
+    asistenWelcome: "Halo! Saya adalah **Asisten CariMurah.ai**, asisten pintar belanja otonom Anda yang berbasis MongoDB Atlas & Gemini. 🚀\n\nSaya bisa membantu Anda:\n- 🔍 **Mencari produk termurah** di marketplace secara real-time.\n- 📊 **Membaca riwayat analisis** yang tersimpan di MongoDB Anda.\n- ⚙️ **Melihat & mengupdate preferensi belanja** Anda secara instan.\n- 📉 **Memantau dan mengaudit kebocoran pengeluaran**.\n\nSilakan ketik pertanyaan Anda atau coba tombol rekomendasi cepat di bawah!",
+    asistenClearChat: "Halo! Riwayat percakapan telah dibersihkan. Ada yang bisa saya bantu sekarang?",
+    asistenPlaceholder: "Ketik daftar barang, pertanyaan budget, atau instruksi update...",
+    asistenThinking: "Asisten sedang memanggil database & merumuskan penghematan...",
+    asistenDesc: "Koneksi MongoDB Atlas & Gemini",
+    asistenResetButton: "Reset Chat",
+    asistenSmartRecs: "Rekomendasi Pintar (Autonomous MCP Tools)",
+    asistenRecDb: "📁 Ambil Profil DB",
+    asistenRecOil: "🔍 Cari Minyak Murah",
+    asistenRecHistory: "📊 Scan Riwayat Penyelamatan",
+    asistenRecPreferences: "⚙️ Update Preferensi Belanja",
+    asistenSendButton: "Kirim",
+    asistenRecDbMsg: "Ambil profil data preferensi saya dari database MongoDB",
+    asistenRecOilMsg: "Cari harga termurah produk minyak goreng Bimoli 2 liter",
+    asistenRecHistoryMsg: "Tampilkan riwayat belanja & penghematan uang saya",
+    asistenRecPreferencesMsg: "Ubah preferensi fokus B2B saya ke pengiriman tercepat",
+    savingsBreakdownTitle: "Rincian Potensi Penghematan",
+    savingsBreakdownSubtitle: "Berdasarkan audit real-time MongoDB Atlas & pipeline Agregasi otonom.",
+    b2bSavingsLabel: "Penghematan Grosir (B2B)",
+    b2cSavingsLabel: "Penghematan Eceran (B2C)",
+    estimatedTotalLabel: "Estimasi Total Diselamatkan",
+    analyticalAuditTitle: "Audit Log Analisis Produk",
+    analyticalAuditSubtitle: "Daftar pemetaan data scan terkini yang tersimpan di memori database.",
+    topSavingItemsTitle: "Produk Hemat Tertinggi",
+    closeButton: "Tutup",
   },
   en: {
     b2bProcurementWorkspace: "B2B Procurement Workspace",
@@ -447,6 +474,33 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     scanBarcodeButton: "Scan Barcode / QR",
     batchRfqButton: "Design Autonomous RFQ (+)",
     emptyHistory: "No search history yet. Start searching or scanning products!",
+    asistenTitle: "CariMurah AI Assistant",
+    asistenSubtitle: "Ask AI Assistant & Search Database",
+    asistenWelcome: "Hello! I am **CariMurah.ai AI Assistant**, your smart autonomous procurement assistant powered by MongoDB Atlas & Gemini. 🚀\n\nI can help you with:\n- 🔍 **Real-time cheapest pricing search** across major marketplaces.\n- 📊 **Analyzing historical records** stored globally in your MongoDB.\n- ⚙️ **Instantly viewing & adjusting your preferences**.\n- 📉 **Monitoring and auditing potential margin leaks**.\n\nType your query below or tap one of our quick recommendation triggers!",
+    asistenClearChat: "Hello! The conversation history has been cleared. How can I help you today?",
+    asistenPlaceholder: "Type your shopping list, budget questions, or update instructions...",
+    asistenThinking: "Assistant is querying database & calculating savings...",
+    asistenDesc: "MongoDB Atlas & Gemini Connection",
+    asistenResetButton: "Reset Chat",
+    asistenSmartRecs: "Smart Recommendations (Autonomous MCP Tools)",
+    asistenRecDb: "📁 Get DB Profile",
+    asistenRecOil: "🔍 Search Cheap Cooking Oil",
+    asistenRecHistory: "📊 Scan Savings History",
+    asistenRecPreferences: "⚙️ Update Preferences",
+    asistenSendButton: "Send",
+    asistenRecDbMsg: "Fetch my profile preference data from the MongoDB database",
+    asistenRecOilMsg: "Find the cheapest cooking oil Bimoli 2 liters",
+    asistenRecHistoryMsg: "Show my shopping history and money savings",
+    asistenRecPreferencesMsg: "Change my B2B focus preference to fastest delivery",
+    savingsBreakdownTitle: "Savings Potential Breakdown",
+    savingsBreakdownSubtitle: "Based on real-time MongoDB Atlas audit & autonomous aggregation query pipelines.",
+    b2bSavingsLabel: "Wholesale (B2B) Savings",
+    b2cSavingsLabel: "Retail (B2C) Savings",
+    estimatedTotalLabel: "Estimated Total Saved",
+    analyticalAuditTitle: "Product Analysis Audit Logs",
+    analyticalAuditSubtitle: "Current mapping of scan records stored in active database cache.",
+    topSavingItemsTitle: "Top Saving Products",
+    closeButton: "Close",
   }
 };
 
@@ -661,6 +715,8 @@ export default function App() {
 
   // Manual Quick Add States
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [showSavingsBreakdownModal, setShowSavingsBreakdownModal] = useState(false);
+  const [showAuditLogsModal, setShowAuditLogsModal] = useState(false);
   const [quickAddName, setQuickAddName] = useState("");
   const [quickAddBrand, setQuickAddBrand] = useState("");
   const [quickAddPrice, setQuickAddPrice] = useState("");
@@ -1241,7 +1297,8 @@ export default function App() {
           message: textToSend,
           history: apiHistory,
           uid: user?.uid || null,
-          isB2B
+          isB2B,
+          language: profile?.preferences?.language || "id"
         })
       });
 
@@ -2441,23 +2498,48 @@ export default function App() {
                )}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className={`p-6 rounded-3xl ${isB2B ? "bg-indigo-500/20 border border-indigo-500/30" : "bg-emerald-50 border border-emerald-100"}`}>
+                  <button 
+                    onClick={() => setShowSavingsBreakdownModal(true)}
+                    className={`p-6 rounded-3xl text-left cursor-pointer active:scale-95 transition-all hover:scale-[1.02] outline-none decoration-transparent ${
+                      isB2B 
+                        ? "bg-indigo-500/20 border border-indigo-500/30 hover:bg-indigo-500/30" 
+                        : "bg-emerald-50 border border-emerald-100 hover:bg-emerald-100"
+                    }`}
+                  >
                     <Wallet className={`w-6 h-6 mb-3 ${isB2B ? "text-indigo-400" : "text-emerald-600"}`} />
-                    <span className="block text-[10px] font-bold uppercase opacity-50">Total Penghematan</span>
+                    <span className="block text-[10px] font-bold uppercase opacity-50 flex items-center justify-between">
+                      <span>{currentLang === "en" ? "Total Savings" : "Total Penghematan"}</span>
+                      <span className="text-[8px] tracking-wide opacity-60">Info →</span>
+                    </span>
                     <span className="text-xl font-black">
                       <CountingNumber 
                         value={totalAllTimeSaved} 
                         prefix={profile?.preferences.currency === 'USD' ? '$' : 'Rp'} 
                       />
                     </span>
-                  </div>
-                  <div className={`p-6 rounded-3xl ${isB2B ? "bg-white/5 border border-white/10" : "bg-slate-50 border border-slate-100"}`}>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const element = document.getElementById("history-section");
+                      if (element) {
+                        element.scrollIntoView({ behavior: "smooth" });
+                        triggerToast(currentLang === "en" ? "Scrolling to history logs" : "Mengarahkan ke riwayat analisis", "info");
+                      } else {
+                        setShowAuditLogsModal(true);
+                      }
+                    }}
+                    className={`p-6 rounded-3xl text-left cursor-pointer active:scale-95 transition-all hover:scale-[1.02] outline-none decoration-transparent ${
+                      isB2B 
+                        ? "bg-white/5 border border-white/10 hover:bg-white/10" 
+                        : "bg-slate-50 border border-slate-100 hover:bg-slate-100"
+                    }`}
+                  >
                     <UserIcon className="w-6 h-6 mb-3 text-rose-500" />
                     <span className="block text-[10px] font-bold uppercase opacity-50">Analisis Dilakukan</span>
                     <span className="text-xl font-black">
                       <CountingNumber value={history.length} />
                     </span>
-                  </div>
+                  </button>
                </div>
 
                {/* Monthly Summary Action */}
@@ -2556,7 +2638,7 @@ export default function App() {
                </div>
 
                {/* Filters UI */}
-               <div className="space-y-4">
+               <div id="history-section" className="space-y-4">
                   <div className="flex items-center justify-between">
                      <h3 className="font-bold text-xs uppercase tracking-widest opacity-40">Filter & Sortir</h3>
                      <div className="flex items-center gap-2">
@@ -3193,8 +3275,8 @@ export default function App() {
                     <MessageSquare className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left flex-1">
-                    <span className="block font-black text-[9px] uppercase tracking-widest text-indigo-200">Asisten CariMurah AI</span>
-                    <span className="text-base font-bold text-white leading-tight block">Tanya Asisten AI & Cari di Database</span>
+                    <span className="block font-black text-[9px] uppercase tracking-widest text-indigo-200">{t("asistenTitle")}</span>
+                    <span className="text-base font-bold text-white leading-tight block">{t("asistenSubtitle")}</span>
                   </div>
                   <Sparkles className="w-5 h-5 text-indigo-300 animate-pulse" />
                 </button>
@@ -3251,15 +3333,25 @@ export default function App() {
               </div>
 
               {history.length > 0 && (
-                <div className={`p-6 rounded-3xl border ${isB2B ? "border-white/10 bg-white/5" : "bg-slate-50 border-slate-100"}`}>
+                <button 
+                  onClick={() => setMode("dashboard")}
+                  className={`w-full p-6 rounded-3xl border text-left cursor-pointer active:scale-95 transition-all outline-none decoration-transparent ${
+                    isB2B 
+                      ? "border-white/10 bg-white/5 hover:bg-white/10" 
+                      : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 text-emerald-500">
-                      <Sparkles className="w-5 h-5" />
-                      <span className="text-xs font-bold uppercase tracking-widest leading-none">Smart Savings Active</span>
+                      <Sparkles className="w-5 h-5 animate-pulse" />
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-widest leading-none text-emerald-500 mb-1">Smart Savings Active</span>
+                        <span className="text-[9px] opacity-40 font-bold uppercase tracking-wider">{t("smartDashboard")} →</span>
+                      </div>
                     </div>
-                    <span className="text-xl font-black">Rp{totalAllTimeSaved.toLocaleString("id-ID")}</span>
+                    <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">Rp{totalAllTimeSaved.toLocaleString("id-ID")}</span>
                   </div>
-                </div>
+                </button>
               )}
             </motion.section>
           ) : mode === "watchlist" ? (
@@ -4666,13 +4758,13 @@ export default function App() {
                      </button>
                      <div>
                         <h2 className="text-xl font-black flex items-center gap-2">
-                          Asisten Pintar AI
+                          {t("asistenTitle")}
                           <span className="flex h-2 w-2 relative">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                           </span>
                         </h2>
-                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-40">Koneksi MongoDB Atlas & Gemini</span>
+                        <span className="text-[10px] uppercase font-bold tracking-widest opacity-40">{t("asistenDesc")}</span>
                      </div>
                   </div>
                   <button 
@@ -4688,7 +4780,7 @@ export default function App() {
                     }}
                     className="text-xs font-black uppercase opacity-40 hover:opacity-100 transition-all border border-slate-200 dark:border-white/10 px-3 py-1.5 rounded-xl block cursor-pointer"
                   >
-                    Reset Chat
+                    {t("asistenResetButton")}
                   </button>
                 </div>
 
@@ -4710,7 +4802,7 @@ export default function App() {
                             : (isB2B ? "bg-white/5 border border-white/10 text-slate-100 rounded-tl-none" : "bg-slate-50 text-slate-800 border border-slate-100 rounded-tl-none")
                         }`}>
                           <div className="markdown-body">
-                             <Markdown>{msg.text}</Markdown>
+                             <Markdown>{msg.id === "welcome" ? t("asistenWelcome") : msg.id.startsWith("welcome-") ? t("asistenClearChat") : msg.text}</Markdown>
                           </div>
                         </div>
 
@@ -4735,7 +4827,7 @@ export default function App() {
                         <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
                       </div>
                       <div className={`px-5 py-3.5 rounded-[1.5rem] text-xs font-mono font-bold uppercase tracking-wider ${isB2B ? "bg-white/5 text-indigo-400" : "bg-slate-50 text-indigo-500"}`}>
-                        Asisten sedang memanggil database & merumuskan penghematan...
+                        {t("asistenThinking")}
                       </div>
                     </div>
                   )}
@@ -4750,35 +4842,35 @@ export default function App() {
 
                 {/* Preset Prompt Recommendations */}
                 <div className="space-y-2 border-t border-slate-100 dark:border-white/10 pt-4">
-                  <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Rekomendasi Pintar (Autonomous MCP Tools)</span>
+                  <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">{t("asistenSmartRecs")}</span>
                   <div className="flex flex-nowrap gap-2 overflow-x-auto pb-2 -mx-2 px-2 snap-x snap-mandatory scrollbar-none">
                     <button 
-                      onClick={() => sendChatMessage("Ambil profil data preferensi saya dari database MongoDB")}
+                      onClick={() => sendChatMessage(t("asistenRecDbMsg"))}
                       disabled={chatLoading}
                       className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
-                      📁 Ambil Profil DB
+                      {t("asistenRecDb")}
                     </button>
                     <button 
-                      onClick={() => sendChatMessage("Cari harga termurah produk minyak goreng Bimoli 2 liter")}
+                      onClick={() => sendChatMessage(t("asistenRecOilMsg"))}
                       disabled={chatLoading}
                       className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
-                      🔍 Cari Minyak Murah
+                      {t("asistenRecOil")}
                     </button>
                     <button 
-                      onClick={() => sendChatMessage("Tampilkan riwayat belanja & penghematan uang saya")}
+                      onClick={() => sendChatMessage(t("asistenRecHistoryMsg"))}
                       disabled={chatLoading}
                       className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
-                      📊 Scan Riwayat Penyelamatan
+                      {t("asistenRecHistory")}
                     </button>
                     <button 
-                      onClick={() => sendChatMessage("Ubah preferensi fokus B2B saya ke pengiriman tercepat")}
+                      onClick={() => sendChatMessage(t("asistenRecPreferencesMsg"))}
                       disabled={chatLoading}
                       className={`px-3 py-1.5 rounded-xl text-[10px] font-bold text-left shrink-0 active:scale-95 transition-all cursor-pointer snap-start ${isB2B ? "bg-white/5 text-indigo-200 border border-white/10" : "bg-slate-50 text-slate-600 border border-slate-100 hover:bg-slate-100"}`}
                     >
-                      ⚙️ Update Preferensi Belanja
+                      {t("asistenRecPreferences")}
                     </button>
                   </div>
                 </div>
@@ -4795,7 +4887,7 @@ export default function App() {
                       }
                     }}
                     disabled={chatLoading}
-                    placeholder="Tanyakan harga, hemat..."
+                    placeholder={t("asistenPlaceholder")}
                     className={`flex-1 min-w-0 px-4 md:px-6 py-3 md:py-4 rounded-2xl border-2 transition-all outline-none text-xs sm:text-sm ${isB2B ? "bg-white/5 border-white/10 focus:border-indigo-500 text-white" : "bg-slate-50 border-slate-100 focus:border-emerald-500 text-slate-900"}`}
                   />
                   <button 
@@ -4803,7 +4895,7 @@ export default function App() {
                     disabled={!chatInput.trim() || chatLoading}
                     className={`px-4 md:px-6 py-3 md:py-4 rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all active:scale-95 shrink-0 shadow-lg cursor-pointer ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-slate-900 text-white"}`}
                   >
-                    Kirim
+                    {t("asistenSendButton")}
                   </button>
                 </div>
              </motion.section>
@@ -6132,6 +6224,174 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showSavingsBreakdownModal && (() => {
+          const b2bSavings = history.filter(h => h.type === "B2B").reduce((acc, h) => acc + (h.totalSaved || 0), 0);
+          const b2cSavings = history.filter(h => h.type === "B2C").reduce((acc, h) => acc + (h.totalSaved || 0), 0);
+          const totalCalc = b2bSavings + b2cSavings || totalAllTimeSaved || 1;
+          const b2bPercent = Math.max(10, Math.min(90, (b2bSavings / totalCalc) * 100));
+
+          const allAnalyzedSubItems = history.flatMap(h => h.result?.items || []);
+          const biggestItem = allAnalyzedSubItems.length > 0 ? [...allAnalyzedSubItems].sort((a, b) => (b.saving || 0) - (a.saving || 0))[0] : null;
+
+          return (
+            <motion.div
+              key="savings-breakdown-modal-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 20 }}
+                className={`max-w-md w-full p-6 md:p-8 rounded-[3.5rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 relative overflow-hidden`}
+              >
+                <div className="absolute top-0 right-0 p-8 opacity-[0.03] rotate-12">
+                  <Sparkles className="w-48 h-48" />
+                </div>
+
+                <div className="flex items-center justify-between z-10 relative">
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-black tracking-widest text-emerald-500 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                      MongoDB Atlas Aggregation
+                    </span>
+                    <h3 className="text-2xl font-black tracking-tight">{t("savingsBreakdownTitle")}</h3>
+                  </div>
+                  <button 
+                    onClick={() => setShowSavingsBreakdownModal(false)}
+                    className="p-2.5 rounded-full bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <p className="text-xs opacity-60 leading-relaxed font-medium">
+                  {t("savingsBreakdownSubtitle")}
+                </p>
+
+                {/* Progress bar or mini donut representation */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-end text-xs font-bold">
+                    <span>Distribusi Penyelamatan Belanja</span>
+                    <span className="text-[10px] font-black uppercase opacity-40">100% Audit Otonom</span>
+                  </div>
+                  <div className="h-4.5 w-full bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden flex p-1">
+                    <div 
+                      style={{ width: `${b2bPercent}%` }} 
+                      className="h-full bg-indigo-500 rounded-full transition-all duration-500" 
+                    />
+                    <div className="w-2" />
+                    <div className="h-full flex-1 bg-emerald-500 rounded-full transition-all duration-500" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-left">
+                    <div className="p-3 bg-indigo-500/5 rounded-2xl border border-indigo-500/10">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-indigo-400 block mb-1">
+                        ● {t("b2bSavingsLabel")}
+                      </span>
+                      <span className="text-base font-black">
+                        Rp{b2bSavings.toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                    <div className="p-3 bg-emerald-500/5 rounded-2xl border border-emerald-500/10">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-emerald-400 block mb-1">
+                        ● {t("b2cSavingsLabel")}
+                      </span>
+                      <span className="text-base font-black">
+                        Rp{b2cSavings.toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dynamic biggest saving item */}
+                {biggestItem && (
+                  <div className="p-4 rounded-3xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 space-y-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest opacity-40 block">Penyelamatan Terbesar</span>
+                    <div className="flex justify-between items-center">
+                      <div className="max-w-[70%]">
+                        <h4 className="text-xs font-black truncate">{biggestItem.productName}</h4>
+                        <p className="text-[9px] text-indigo-500 font-bold">{biggestItem.brand || "Generik Wholesaler"}</p>
+                      </div>
+                      <span className="text-sm font-black text-emerald-500 font-mono flex-shrink-0 font-bold">
+                        +Rp{biggestItem.saving?.toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setShowSavingsBreakdownModal(false)}
+                  className="w-full py-4 text-center cursor-pointer bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 transition-all rounded-2xl font-black text-xs uppercase tracking-wider block"
+                >
+                  {t("closeButton")}
+                </button>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+
+        {showAuditLogsModal && (
+          <motion.div
+            key="audit-logs-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className={`max-w-md w-full p-6 md:p-8 rounded-[3.5rem] ${isB2B ? "bg-slate-900 border border-white/10 text-white" : "bg-white text-slate-900"} shadow-2xl space-y-6 relative`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 flex items-center gap-1.5">
+                    ⚙️ Auditing Node
+                  </span>
+                  <h3 className="text-2xl font-black tracking-tight">{t("analyticalAuditTitle")}</h3>
+                </div>
+                <button 
+                  onClick={() => setShowAuditLogsModal(false)}
+                  className="p-2.5 rounded-full bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-xs opacity-60 leading-relaxed font-medium">
+                {t("analyticalAuditSubtitle")}
+              </p>
+
+              <div className="max-h-64 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
+                {history.map((item, idx) => {
+                  const firstProduct = item.result?.items?.[0];
+                  return (
+                    <div key={item.id || idx} className="p-3 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-2xl flex justify-between items-center text-xs">
+                      <div className="max-w-[200px] truncate">
+                        <p className="font-bold truncate">{firstProduct?.productName || "Analisis Multi-Barang"}</p>
+                        <span className="text-[9px] opacity-40 inline-block mt-0.5">{new Date(item.date || Date.now()).toLocaleDateString("id-ID")}</span>
+                      </div>
+                      <span className="text-emerald-500 font-mono font-bold">
+                        +Rp{item.totalSaved?.toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setShowAuditLogsModal(false)}
+                className="w-full py-4 text-center cursor-pointer bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 transition-all rounded-2xl font-black text-xs uppercase tracking-wider block"
+              >
+                {t("closeButton")}
+              </button>
             </motion.div>
           </motion.div>
         )}
