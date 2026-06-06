@@ -2441,23 +2441,29 @@ export default function App() {
                )}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className={`p-6 rounded-3xl ${isB2B ? "bg-indigo-500/20 border border-indigo-500/30" : "bg-emerald-50 border border-emerald-100"}`}>
+                  <button
+                    onClick={() => document.getElementById('dashboard-history')?.scrollIntoView({ behavior: 'smooth' })}
+                    className={`p-6 rounded-3xl text-left cursor-pointer hover:shadow-md active:scale-95 transition-all ${isB2B ? "bg-indigo-500/20 border border-indigo-500/30" : "bg-emerald-50 border border-emerald-100"}`}
+                  >
                     <Wallet className={`w-6 h-6 mb-3 ${isB2B ? "text-indigo-400" : "text-emerald-600"}`} />
                     <span className="block text-[10px] font-bold uppercase opacity-50">Total Penghematan</span>
                     <span className="text-xl font-black">
-                      <CountingNumber 
-                        value={totalAllTimeSaved} 
-                        prefix={profile?.preferences.currency === 'USD' ? '$' : 'Rp'} 
+                      <CountingNumber
+                        value={totalAllTimeSaved}
+                        prefix={profile?.preferences.currency === 'USD' ? '$' : 'Rp'}
                       />
                     </span>
-                  </div>
-                  <div className={`p-6 rounded-3xl ${isB2B ? "bg-white/5 border border-white/10" : "bg-slate-50 border border-slate-100"}`}>
+                  </button>
+                  <button
+                    onClick={() => document.getElementById('dashboard-history')?.scrollIntoView({ behavior: 'smooth' })}
+                    className={`p-6 rounded-3xl text-left cursor-pointer hover:shadow-md active:scale-95 transition-all ${isB2B ? "bg-white/5 border border-white/10" : "bg-slate-50 border border-slate-100"}`}
+                  >
                     <UserIcon className="w-6 h-6 mb-3 text-rose-500" />
                     <span className="block text-[10px] font-bold uppercase opacity-50">Analisis Dilakukan</span>
                     <span className="text-xl font-black">
                       <CountingNumber value={history.length} />
                     </span>
-                  </div>
+                  </button>
                </div>
 
                {/* Monthly Summary Action */}
@@ -2686,7 +2692,7 @@ export default function App() {
                           )}
                         </div>
                       )}
-                      <h3 className="font-bold text-sm uppercase tracking-widest opacity-40">Riwayat Analisis Agen ({filteredHistory.length})</h3>
+                      <h3 id="dashboard-history" className="font-bold text-sm uppercase tracking-widest opacity-40">Riwayat Analisis Agen ({filteredHistory.length})</h3>
                      <div className="flex items-center gap-3">
                         {filteredHistory.length > 0 && (
                           <button 
@@ -3251,7 +3257,10 @@ export default function App() {
               </div>
 
               {history.length > 0 && (
-                <div className={`p-6 rounded-3xl border ${isB2B ? "border-white/10 bg-white/5" : "bg-slate-50 border-slate-100"}`}>
+                <button
+                  onClick={() => setMode('dashboard')}
+                  className={`w-full p-6 rounded-3xl border cursor-pointer hover:shadow-md active:scale-95 transition-all ${isB2B ? "border-white/10 bg-white/5" : "bg-slate-50 border-slate-100"}`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 text-emerald-500">
                       <Sparkles className="w-5 h-5" />
@@ -3259,7 +3268,7 @@ export default function App() {
                     </div>
                     <span className="text-xl font-black">Rp{totalAllTimeSaved.toLocaleString("id-ID")}</span>
                   </div>
-                </div>
+                </button>
               )}
             </motion.section>
           ) : mode === "watchlist" ? (
