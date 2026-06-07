@@ -41,7 +41,7 @@ Purchase a one-time quota (pay-as-you-go) without the hassle of recurring monthl
 *   **Target**: Resellers, drop-shippers, & heavy personal shoppers.
 *   **Features**: 
     *   **Predictive AI Forecasting**: Analyzes historical cycles (e.g., Payday, 6.6, 12.12) to suggest "Wait" or "Buy".
-    *   **Persistent Smart Watchlist**: 24/7 Agent Monitoring that blasts alerts when price thresholds drop.
+    *   **Persistent Smart Watchlist**: 24/7 Agent Monitoring that blasts real-time alerts when price thresholds drop. Configured with a dedicated **Multi-Channel Smart Alert System** (WhatsApp, Email, & Telegram) with active visual preference binding.
     *   **Interactive Price Cycle Simulator**: Simulate Payday, Double Date, or Midnight Flash Sale discount drops with dynamic Recharts trendlines.
     *   **Deep-Link Checkout**: Autonomous cart filling on destination marketplaces.
 
@@ -62,6 +62,10 @@ Purchase a one-time quota (pay-as-you-go) without the hassle of recurring monthl
 ## 🛠️ Unified Core Capabilities
 
 *   **Bilingual Translation Support (Indonesian & English)**: Fully localized UI dashboard, welcoming hero cards, and flywheel components tailored dynamically based on simple profile-preference language selectors (perfect for international hackathon judges!).
+*   **Multi-Channel Smart Alert Engine**: A unified 24/7 active alert configuration center that keeps users informed when target discounts are detected. Seamlessly toggles and configures:
+    *   **WhatsApp Alert**: Green branding switch coupled with instant number validator/manual overlays.
+    *   **Email Alert**: Purple theme integration mapping recipient email parameters.
+    *   **Telegram Alert**: Sky-blue branding switch for telegram-specific handle/username entries.
 *   **CariMurah Enterprise Flywheel Workspace**: Interactive cockpit incorporating live forecasting widgets, printable high-security business documents, on-the-fly bulk quantity configurators, dynamic posture-based renegotiation script generation, and single-click WhatsApp API routing.
 *   **Integrated B2B QR Scanner & Ledger Suite**: Uses an optimized stacked trigger layout for single-handed mobile usage. Features an overlay-based Interactive Guide (*Panduan*), a sliding scan ledger showing the last 5 successful matches (saving/items audit), and a context-aware feedback/reporting FAB directly embedded within the viewfinder.
 *   **Predictive AI Cycle Engine**: Simulates discount patterns during Payday (8% off), Double Date (15% off), or Midnight Flash Sales (20% off) dynamically.

@@ -65,7 +65,8 @@ import {
   Info,
   Printer,
   Calendar,
-  Smartphone
+  Smartphone,
+  Edit2
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { Capacitor } from "@capacitor/core";
@@ -594,7 +595,48 @@ export default function App() {
   const t = useCallback((key: keyof typeof TRANSLATIONS["id"]) => {
     return TRANSLATIONS[currentLang]?.[key] || TRANSLATIONS["id"]?.[key] || key;
   }, [currentLang]);
-  const [watchlist, setWatchlist] = useState<ItemAnalysis[]>([]);
+  const [watchlist, setWatchlist] = useState<ItemAnalysis[]>(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_watchlist");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn("Failed to parse watchlist from localStorage", e);
+    }
+    return [
+      {
+        productName: "Bimoli Minyak Goreng Spesial Pouch 2L",
+        brand: "Bimoli",
+        currentPrice: 42000,
+        recommendedPrice: 38500,
+        platform: "Tokopedia Wholesale",
+        url: "https://tokopedia.com",
+        saving: 3500,
+        minPriceDrop: 8,
+        rating: 4.8,
+        deliveryDays: "1-2 Hari",
+        stockStatus: "Ready Stok",
+        features: ["Premium Grade", "Fortifikasi Vitamin A"],
+        isWinner: true
+      },
+      {
+        productName: "Beras Sentra Ramos Premium 5kg",
+        brand: "Sentra Ramos",
+        currentPrice: 85000,
+        recommendedPrice: 79900,
+        platform: "Shopee Supermarket",
+        url: "https://shopee.co.id",
+        saving: 5100,
+        minPriceDrop: 12,
+        rating: 4.9,
+        deliveryDays: "2-3 Hari",
+        stockStatus: "Ready Stok",
+        features: ["Slyp Super", "Nasi Pulen"],
+        isWinner: true
+      }
+    ];
+  });
   const [manualText, setManualText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -606,7 +648,97 @@ export default function App() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [dateRange, setDateRange] = useState<"ALL" | "7D" | "30D">("ALL");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [watchlistThreshold, setWatchlistThreshold] = useState(5);
+  
+  const [watchlistThreshold, setWatchlistThreshold] = useState(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_watchlist_threshold");
+      return saved ? parseInt(saved, 10) : 5;
+    } catch {
+      return 5;
+    }
+  });
+
+  const [alertChannels, setAlertChannels] = useState(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_alert_channels");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.telegram === undefined) {
+          parsed.telegram = true;
+        }
+        return parsed;
+      }
+      return { whatsapp: true, email: true, telegram: true };
+    } catch {
+      return { whatsapp: true, email: true, telegram: true };
+    }
+  });
+
+  const [alertPhone, setAlertPhone] = useState(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_alert_phone");
+      if (saved === "0812-3456-7890") return "";
+      return saved || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const [alertEmail, setAlertEmail] = useState(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_alert_email");
+      if (saved === "khudri@binadarma.ac.id") return "";
+      return saved || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const [alertTelegram, setAlertTelegram] = useState(() => {
+    try {
+      const saved = localStorage.getItem("carimurah_alert_telegram");
+      if (saved === "@khudri") return "";
+      return saved || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const [simulatingIdx, setSimulatingIdx] = useState<number | null>(null);
+  const [simulatingProgress, setSimulatingProgress] = useState("");
+
+  const playAlertSound = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+      gain1.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.15);
+      
+      setTimeout(() => {
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.frequency.setValueAtTime(880.00, ctx.currentTime);
+        gain2.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc2.start();
+        osc2.stop(ctx.currentTime + 0.3);
+      }, 100);
+    } catch (e) {
+      console.warn("AudioContext failed to trigger", e);
+    }
+  }, []);
+
   const [trendItemId, setTrendItemId] = useState<number | null>(null);
   const [showShareSuccess, setShowShareSuccess] = useState(false);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
@@ -674,6 +806,74 @@ export default function App() {
     setCurrentLogIndex(0);
   };
 
+  const startPriceDropSimulation = (idx: number) => {
+    if (simulatingIdx !== null) return;
+    
+    setSimulatingIdx(idx);
+    const item = watchlist[idx];
+    
+    setSimulatingProgress("🤖 Otonom Agent: Menghubungkan ke pemantau harga...");
+    
+    setTimeout(() => {
+      setSimulatingProgress("🔍 Otonom Agent: Memindai promo Tokopedia & Shopee...");
+    }, 700);
+
+    setTimeout(() => {
+      setSimulatingProgress("📈 Otonom Agent: Menemukan diskon grosir baru di market...");
+    }, 1400);
+
+    setTimeout(() => {
+      setSimulatingProgress("💥 Otonom Agent: Diskonto Terdeteksi! Menghitung landed-cost terendah...");
+    }, 2150);
+
+    setTimeout(() => {
+      const dropThreshold = item.minPriceDrop || 5;
+      const targetPrice = item.recommendedPrice * (1 - dropThreshold / 100);
+      const droppedPrice = Math.floor(targetPrice * 0.95); // drop below target
+      
+      const newWatchlist = [...watchlist];
+      newWatchlist[idx] = {
+        ...item,
+        currentPrice: item.currentPrice,
+        recommendedPrice: item.recommendedPrice,
+        ...({
+          simulatedPrice: droppedPrice,
+          priceDropped: true,
+          originalPriceBeforeDrop: item.recommendedPrice,
+          dropTime: new Date().toLocaleTimeString("id-ID", { hour: "numeric", minute: "numeric", second: "numeric" })
+        } as any)
+      };
+
+      setWatchlist(newWatchlist);
+      setSimulatingIdx(null);
+      setSimulatingProgress("");
+      playAlertSound();
+      
+      const activeChannels = [];
+      if (alertChannels.whatsapp) activeChannels.push(`WhatsApp (${alertPhone})`);
+      if (alertChannels.email && alertEmail) activeChannels.push(`Email (${alertEmail})`);
+      if (alertChannels.telegram) activeChannels.push("Telegram");
+      
+      const channelStr = activeChannels.length > 0 
+        ? `Terkirim lewat: ${activeChannels.join(", ")}`
+        : "Semua saluran notifikasi nonaktif.";
+      
+      triggerToast(`🔔 DISKON: Harga ${item.productName} anjlok ke Rp${droppedPrice.toLocaleString('id-ID')} (${Math.round((item.recommendedPrice - droppedPrice) / item.recommendedPrice * 100)}% Drop)! ${channelStr}`, "success");
+    }, 3000);
+  };
+
+  const resetPriceDropSimulation = (idx: number) => {
+    const newWatchlist = [...watchlist];
+    const item = { ...newWatchlist[idx] };
+    delete (item as any).simulatedPrice;
+    delete (item as any).priceDropped;
+    delete (item as any).originalPriceBeforeDrop;
+    delete (item as any).dropTime;
+    newWatchlist[idx] = item;
+    setWatchlist(newWatchlist);
+    triggerToast(`Harga ${item.productName} dikembalikan ke semula.`, "info");
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (agentCheckoutStep === "processing") {
@@ -698,6 +898,55 @@ export default function App() {
   useEffect(() => {
     (window as any).triggerToast = triggerToast;
   }, [triggerToast]);
+
+  // Synchronize Watchlist alerts states with localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("carimurah_watchlist", JSON.stringify(watchlist));
+    } catch (e) {
+      console.warn("Failed to save watchlist to localStorage", e);
+    }
+  }, [watchlist]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("carimurah_watchlist_threshold", watchlistThreshold.toString());
+    } catch {
+      // ignore
+    }
+  }, [watchlistThreshold]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("carimurah_alert_channels", JSON.stringify(alertChannels));
+    } catch {
+      // ignore
+    }
+  }, [alertChannels]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("carimurah_alert_phone", alertPhone);
+    } catch {
+      // ignore
+    }
+  }, [alertPhone]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("carimurah_alert_email", alertEmail);
+    } catch {
+      // ignore
+    }
+  }, [alertEmail]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("carimurah_alert_telegram", alertTelegram);
+    } catch {
+      // ignore
+    }
+  }, [alertTelegram]);
 
   // Feedback states
   const [feedbackSubject, setFeedbackSubject] = useState("");
@@ -3356,126 +3605,446 @@ export default function App() {
             </motion.section>
           ) : mode === "watchlist" ? (
              <motion.section key="watchlist" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
-                <div className="flex items-center gap-4">
-                   <button onClick={() => setMode(null)} className="p-2 bg-slate-100 dark:bg-white/10 rounded-full"><ArrowLeft className="w-5 h-5" /></button>
-                   <h2 className="text-2xl font-black">Smart Watchlist</h2>
-                </div>
-
-                 <div className="p-8 rounded-[2.5rem] bg-indigo-500/10 border border-indigo-500/20">
-                   <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center">
-                         <TrendingDown className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                         <span className="block font-black text-xs uppercase tracking-widest text-indigo-400">24/7 Monitoring</span>
-                         <h3 className="font-bold text-lg leading-tight">Agen Otonom Aktif</h3>
+                {/* Header Section */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-6">
+                   <div className="flex items-center gap-4">
+                      <button onClick={() => setMode(null)} className="p-3 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 rounded-full transition-all active:scale-95 cursor-pointer text-slate-800 dark:text-white">
+                         <ArrowLeft className="w-5 h-5" />
+                      </button>
+                      <div>
+                         <span className={`text-[9px] font-black uppercase tracking-widest ${isB2B ? "text-indigo-400" : "text-emerald-500"}`}>Autonomous price tracking tracker</span>
+                         <h2 className={`text-2xl font-black tracking-tight ${isB2B ? "text-indigo-400" : "text-slate-900 dark:text-white"}`}>Price Drop Alerts Hub</h2>
                       </div>
                    </div>
-                   <p className="text-xs opacity-60 leading-relaxed italic mb-6">Agen kami terus memantau harga di Tokopedia, Shopee, & Distributor. Kamu akan menerima notifikasi otomatis saat harga menyentuh target.</p>
+
+                   <button
+                     onClick={() => {
+                       playAlertSound();
+                       triggerToast("🔔 Tes Chime: CariMurah Audio Alert aktif!", "success");
+                     }}
+                     className="flex items-center gap-2 px-4 py-2.5 text-[11px] font-black uppercase tracking-wider bg-slate-150 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 rounded-2xl transition-all active:scale-95 text-slate-700 dark:text-slate-200 cursor-pointer text-center"
+                   >
+                     <Volume2 className="w-4 h-4 text-emerald-500" /> Tes Chime Suara
+                   </button>
+                </div>
+
+                {/* Dashboard / Sidebar Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                    
-                   <div className="pt-6 border-t border-indigo-500/10">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-2">Threshold Notifikasi: {watchlistThreshold}%</label>
-                      <input 
-                        type="range" 
-                        min="1" 
-                        max="50" 
-                        value={watchlistThreshold} 
-                        onChange={(e) => setWatchlistThreshold(parseInt(e.target.value))}
-                        className="w-full h-1.5 bg-indigo-500/20 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                      />
-                      <div className="flex justify-between text-[8px] font-bold uppercase opacity-40 mt-1">
-                         <span>Sensitif (1%)</span>
-                         <span>Hemat Besar (50%)</span>
-                      </div>
-                   </div>
-                </div>
-
-                <div className="space-y-4">
-                   {watchlist.length === 0 ? (
-                     <div className="flex flex-col items-center justify-center py-20 px-6 text-center space-y-6 bg-indigo-500/5 rounded-[2.5rem] border border-dashed border-indigo-500/20">
-                       <div className={`w-20 h-20 rounded-full flex items-center justify-center ${isB2B ? "bg-white/5" : "bg-slate-100"}`}>
-                         <Eye className="w-10 h-10 opacity-20 text-indigo-500" />
-                       </div>
-                       <div className="max-w-xs space-y-2">
-                         <h3 className="font-bold text-lg text-indigo-400">Watchlist Kosong</h3>
-                         <p className="text-xs opacity-50 leading-relaxed">Tambahkan barang ke watchlist saat hasil analisis keluar untuk memantau penurunan harganya secara otomatis oleh AI.</p>
-                       </div>
-                       <button 
-                         onClick={() => { setMode(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                         className={`px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 shadow-xl ${isB2B ? "bg-indigo-500 text-white shadow-indigo-500/20" : "bg-emerald-500 text-white shadow-emerald-500/20"}`}
-                       >
-                          Cari Barang & Pantau
-                       </button>
-                     </div>
-                   ) : (
-                      watchlist.map((item, idx) => (
-                         <div key={idx} className={`p-6 rounded-3xl border ${isB2B ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100"}`}>
-                            <div className="flex justify-between items-start mb-4">
-                               <div>
-                                  <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">{item.brand}</span>
-                                  <h4 className="font-bold text-sm">{item.productName}</h4>
-                               </div>
-                               <button 
-                                 onClick={() => {
-                                    if (typeof pendo !== "undefined") {
-                                      pendo.track("watchlist_item_removed", {
-                                        product_name: item.productName,
-                                        watchlist_size_after: watchlist.length - 1,
-                                        user_tier: profile?.subscription?.tier || "FREE"
-                                      });
-                                    }
-                                    setWatchlist(watchlist.filter((_, i) => i !== idx));
-                                  }}
-                                 className="p-1 opacity-20 hover:opacity-100 text-rose-500"
-                               >
-                                  <Trash className="w-4 h-4" />
-                               </button>
+                   {/* LEFT COLUMN: ACTIVE MONITORS (col-span-2) */}
+                   <div className="lg:col-span-2 space-y-6">
+                      <div className="p-6 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 shadow-sm">
+                         <div className="flex items-center gap-4 mb-3">
+                            <div className="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center">
+                               <TrendingDown className="w-6 h-6 text-white" />
                             </div>
-                             <div className="mb-4">
-                                <input 
-                                  type="range" 
-                                  min="1" 
-                                  max="50" 
-                                  value={item.minPriceDrop || 5} 
-                                  onChange={(e) => {
-                                    const newWatchlist = [...watchlist];
-                                    newWatchlist[idx] = { ...item, minPriceDrop: parseInt(e.target.value) };
-                                    setWatchlist(newWatchlist);
-                                  }}
-                                  onMouseUp={(e) => {
-                                     if (typeof pendo !== "undefined") {
-                                       pendo.track("watchlist_threshold_configured", {
-                                         product_name: item.productName,
-                                         threshold_percent: parseInt((e.target as HTMLInputElement).value),
-                                         previous_threshold: item.minPriceDrop || 5,
-                                         user_tier: profile?.subscription?.tier || "FREE"
-                                       });
-                                     }
-                                   }}
-                                   onTouchEnd={(e) => {
-                                     if (typeof pendo !== "undefined") {
-                                       pendo.track("watchlist_threshold_configured", {
-                                         product_name: item.productName,
-                                         threshold_percent: parseInt((e.target as HTMLInputElement).value),
-                                         previous_threshold: item.minPriceDrop || 5,
-                                         user_tier: profile?.subscription?.tier || "FREE"
-                                       });
-                                     }
-                                   }}
-                                   className={`w-full h-1 rounded-lg appearance-none cursor-pointer accent-emerald-500 ${isB2B ? "bg-white/10" : "bg-slate-200"}`}
-                                />
-                             </div>
-
-                             <div className="flex justify-between items-end">
-                               <div className="space-y-1">
-                                  <span className="block text-[8px] font-black uppercase opacity-40">Min. Drop Target ({item.minPriceDrop || 5}%)</span>
-                                  <span className="text-lg font-black text-emerald-500">Rp{(item.recommendedPrice * (1 - (item.minPriceDrop || 5)/100)).toLocaleString("id-ID")}</span>
-                               </div>
-                               <a href={item.url} target="_blank" className={`px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest ${isB2B ? "bg-white text-slate-950" : "bg-slate-900 text-white"}`}>Cek Manual</a>
+                            <div className="flex-1">
+                               <span className="block font-black text-[9px] uppercase tracking-widest text-indigo-400">24/7 Crawler Engine</span>
+                               <h3 className="font-bold text-base leading-tight">Crawler Agen Otonom Aktif</h3>
                             </div>
                          </div>
-                      ))
-                   )}
+                         <p className="text-xs opacity-75 leading-relaxed">
+                            Sistem mengumpulkan dan melacak fluktuasi harga grosir di berbagai e-commerce secara terus-menerus. Silakan gunakan tombol simulasi pada item di bawah untuk mencoba respons alert notifikasi otonom.
+                         </p>
+                      </div>
+
+                      {/* Items Row */}
+                      <div className="space-y-4">
+                         <div className="flex justify-between items-center px-1">
+                            <span className="text-[11px] font-black uppercase tracking-wider opacity-60">Barang Sedang Dipantau ({watchlist.length})</span>
+                            {watchlist.length === 0 && (
+                              <button
+                                onClick={() => {
+                                  const samples = [
+                                    {
+                                      productName: "Bimoli Minyak Goreng Spesial Pouch 2L",
+                                      brand: "Bimoli",
+                                      currentPrice: 42000,
+                                      recommendedPrice: 38500,
+                                      platform: "Tokopedia Wholesale",
+                                      url: "https://tokopedia.com",
+                                      saving: 3500,
+                                      minPriceDrop: 8,
+                                      rating: 4.8,
+                                      deliveryDays: "1-2 Hari",
+                                      stockStatus: "Ready Stok",
+                                      features: ["Premium Grade", "Fortifikasi Vitamin A"],
+                                      isWinner: true
+                                    },
+                                    {
+                                      productName: "Beras Sentra Ramos Premium 5kg",
+                                      brand: "Sentra Ramos",
+                                      currentPrice: 85000,
+                                      recommendedPrice: 79900,
+                                      platform: "Shopee Supermarket",
+                                      url: "https://shopee.co.id",
+                                      saving: 5100,
+                                      minPriceDrop: 12,
+                                      rating: 4.9,
+                                      deliveryDays: "2-3 Hari",
+                                      stockStatus: "Ready Stok",
+                                      features: ["Slyp Super", "Nasi Pulen"],
+                                      isWinner: true
+                                    },
+                                    {
+                                      productName: "Kertas HVS Sinar Dunia A4 80gr Karton",
+                                      brand: "Sinar Dunia",
+                                      currentPrice: 285000,
+                                      recommendedPrice: 265000,
+                                      platform: "Lazada Grosir",
+                                      url: "https://lazada.co.id",
+                                      saving: 20000,
+                                      minPriceDrop: 5,
+                                      rating: 4.7,
+                                      deliveryDays: "1-2 Hari",
+                                      stockStatus: "Ready Stok",
+                                      features: ["Isi 5 Rim", "Putih 98%"],
+                                      isWinner: true
+                                    }
+                                  ];
+                                  setWatchlist(samples);
+                                  triggerToast(" Watchlist disemai dengan item default siap simulasi!", "success");
+                                }}
+                                className="text-[10px] font-bold text-indigo-500 hover:underline dark:text-indigo-400"
+                              >
+                                + Semai Contoh Item
+                              </button>
+                            )}
+                         </div>
+
+                         {watchlist.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-16 px-6 text-center space-y-5 bg-indigo-500/5 rounded-3xl border border-dashed border-indigo-500/20">
+                              <Eye className="w-12 h-12 opacity-30 text-indigo-500 animate-pulse" />
+                              <div className="max-w-xs">
+                                <h4 className="font-bold text-sm text-slate-700 dark:text-slate-300">Belum Ada Barang Dipantau</h4>
+                                <p className="text-xs opacity-60 leading-relaxed mt-1">Gunakan hasil scan di halaman depan lalu klik tombol "Tambahkan ke Watchlist".</p>
+                              </div>
+                              <button 
+                                onClick={() => setMode(null)}
+                                className={`px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-md text-white bg-indigo-500 shadow-indigo-500/10 hover:bg-indigo-600`}
+                              >
+                                Cari & Pantau Barang Baru
+                              </button>
+                            </div>
+                         ) : (
+                            watchlist.map((item, idx) => {
+                               const minDrop = item.minPriceDrop || 5;
+                               const basePrice = item.recommendedPrice;
+                               const targetPrice = Math.floor(basePrice * (1 - minDrop / 100));
+                               const currentSimPrice = (item as any).simulatedPrice || basePrice;
+                               const isDropped = !!(item as any).priceDropped;
+                               
+                               return (
+                                  <div 
+                                    key={idx} 
+                                    className={`p-6 rounded-3xl border transition-all ${
+                                      isDropped 
+                                        ? "bg-rose-500/5 border-rose-500/30 shadow-lg shadow-rose-500/5 ring-1 ring-rose-500/10 animate-fade-in" 
+                                        : isB2B 
+                                        ? "bg-white/5 border-white/10 hover:border-indigo-500/20" 
+                                        : "bg-slate-50 border-slate-100 hover:bg-slate-100/50"
+                                    }`}
+                                  >
+                                     {/* Header Info */}
+                                     <div className="flex justify-between items-start gap-4 mb-3">
+                                        <div className="space-y-0.5">
+                                           <span className="inline-block text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                                              {item.brand} • {item.platform || "CariMurah Node"}
+                                           </span>
+                                           <h4 className="font-bold text-sm text-slate-800 dark:text-white leading-snug">{item.productName}</h4>
+                                        </div>
+                                        <button 
+                                          onClick={() => {
+                                             if (typeof pendo !== "undefined") {
+                                               pendo.track("watchlist_item_removed", {
+                                                 product_name: item.productName,
+                                                 watchlist_size_after: watchlist.length - 1,
+                                                 user_tier: profile?.subscription?.tier || "FREE"
+                                               });
+                                             }
+                                             setWatchlist(watchlist.filter((_, i) => i !== idx));
+                                             triggerToast(`Dilepas dari monitor: ${item.productName}`, "info");
+                                           }}
+                                          className="p-1.5 opacity-40 hover:opacity-100 font-bold text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+                                          title="Hapus dari Watchlist"
+                                        >
+                                           <Trash className="w-4 h-4" />
+                                        </button>
+                                     </div>
+
+                                     {/* Prices Summary Card */}
+                                     <div className="grid grid-cols-3 gap-2 bg-slate-100/40 dark:bg-white/5 p-3.5 rounded-2xl mb-4 border border-slate-200/40 dark:border-white/5">
+                                        <div className="text-center sm:text-left">
+                                           <span className="block text-[8px] uppercase tracking-wider opacity-60">Harga Awal</span>
+                                           <span className="text-xs font-semibold line-through opacity-70">Rp{item.currentPrice.toLocaleString("id-ID")}</span>
+                                        </div>
+                                        <div className="text-center sm:text-left border-x border-slate-200/60 dark:border-white/10 px-2">
+                                           <span className="block text-[8px] uppercase tracking-wider opacity-60">Drop Target ({minDrop}%)</span>
+                                           <span className="text-xs font-black text-rose-500">Rp{targetPrice.toLocaleString("id-ID")}</span>
+                                        </div>
+                                        <div className="text-center sm:text-left">
+                                           <span className="block text-[8px] uppercase tracking-wider opacity-60">Harga Saat Ini</span>
+                                           <span className={`text-xs font-black ${isDropped ? "text-emerald-500 font-bold scale-105 inline-block text-shadow" : "text-slate-800 dark:text-slate-100"}`}>
+                                              Rp{currentSimPrice.toLocaleString("id-ID")}
+                                           </span>
+                                        </div>
+                                     </div>
+
+                                     {/* Threshold Percent Slider */}
+                                     <div className="space-y-1.5 mb-4 p-3 bg-slate-200/30 dark:bg-white/5 rounded-2xl">
+                                        <div className="flex justify-between text-[9px] font-black uppercase opacity-60">
+                                           <span>Atur Alert Aliran: {minDrop}% Drop</span>
+                                           <span className="text-slate-500">Target Maks Rp{targetPrice.toLocaleString("id-ID")}</span>
+                                        </div>
+                                        <input 
+                                          type="range" 
+                                          min="1" 
+                                          max="50" 
+                                          value={minDrop} 
+                                          onChange={(e) => {
+                                            const newWatchlist = [...watchlist];
+                                            newWatchlist[idx] = { ...item, minPriceDrop: parseInt(e.target.value) };
+                                            setWatchlist(newWatchlist);
+                                          }}
+                                          onMouseUp={(e) => {
+                                             if (typeof pendo !== "undefined") {
+                                               pendo.track("watchlist_threshold_configured", {
+                                                 product_name: item.productName,
+                                                 threshold_percent: parseInt((e.target as HTMLInputElement).value),
+                                                 previous_threshold: item.minPriceDrop || 5,
+                                                 user_tier: profile?.subscription?.tier || "FREE"
+                                               });
+                                             }
+                                           }}
+                                           className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-indigo-500 ${isB2B ? "bg-white/10" : "bg-slate-200"}`}
+                                        />
+                                     </div>
+
+                                     {/* Simulation / Tracking Status Section */}
+                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-200/50 dark:border-white/5">
+                                        <div className="flex-1">
+                                           {simulatingIdx === idx ? (
+                                              <div className="flex items-center gap-2 text-indigo-500">
+                                                 <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                                                 <span className="text-[10px] font-bold animate-pulse">{simulatingProgress}</span>
+                                              </div>
+                                           ) : isDropped ? (
+                                              <div className="flex flex-col gap-1">
+                                                 <div className="flex items-center gap-1.5 text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-lg w-fit text-[9px] font-black uppercase tracking-wider animate-pulse">
+                                                    <CheckCircle2 className="w-3 h-3" /> Drop Terdeteksi! (Hemat Rp{(basePrice - currentSimPrice).toLocaleString("id-ID")})
+                                                 </div>
+                                                 <span className="text-[8px] opacity-50 block">Pemberitahuan terkirim pukul {(item as any).dropTime || "Baru saja"}</span>
+                                              </div>
+                                           ) : (
+                                              <div className="flex items-center gap-2 text-slate-500">
+                                                 <span className="relative flex h-2 w-2">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                                                 </span>
+                                                 <span className="text-[9px] font-bold uppercase tracking-wider">Mencari harga di bawah Rp{targetPrice.toLocaleString("id-ID")}...</span>
+                                              </div>
+                                           )}
+                                        </div>
+
+                                        <div className="flex items-center gap-2 sm:justify-end">
+                                           {isDropped ? (
+                                              <button
+                                                onClick={() => resetPriceDropSimulation(idx)}
+                                                className="px-3.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl bg-slate-200 hover:bg-slate-350 dark:bg-white/10 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300 transition-all active:scale-95"
+                                              >
+                                                Reset Monitor
+                                              </button>
+                                           ) : (
+                                              <button
+                                                onClick={() => startPriceDropSimulation(idx)}
+                                                disabled={simulatingIdx !== null}
+                                                className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all active:scale-95 text-white ${
+                                                  simulatingIdx !== null 
+                                                    ? "bg-slate-300 dark:bg-white/5 cursor-not-allowed text-slate-400" 
+                                                    : "bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/15"
+                                                }`}
+                                              >
+                                                Simulasi Drop
+                                              </button>
+                                           )}
+                                           <a 
+                                             href={item.url} 
+                                             target="_blank" 
+                                             rel="referrer" 
+                                             className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl bg-slate-900 border border-slate-800 text-white dark:bg-white dark:text-slate-950 text-center transition-all active:scale-95 hover:opacity-90"
+                                           >
+                                             Cek Manual
+                                           </a>
+                                        </div>
+                                     </div>
+                                  </div>
+                               );
+                            })
+                         )}
+                      </div>
+                   </div>
+
+                   {/* RIGHT COLUMN: NOTIFICATION SETUP PIN (col-span-1) */}
+                   <div className="space-y-6">
+                      
+                      {/* Section Card */}
+                      <div className="p-6 rounded-[2.5rem] bg-indigo-500/5 border border-indigo-500/10 space-y-5">
+                         <div>
+                            <span className="block text-[8px] font-black uppercase tracking-widest opacity-40">Saluran Notifikasi</span>
+                            <h3 className="text-base font-black leading-tight">Notification Channels</h3>
+                         </div>
+
+                         <p className="text-xs opacity-75 leading-relaxed">
+                            Pilih media untuk menerima info penurunan harga ketika target diskon terdeteksi oleh agen otonom kami.
+                         </p>
+
+                         <div className="space-y-4 border-t border-slate-200 dark:border-white/5 pt-4">
+                            
+                            {/* WhatsApp alert channel */}
+                            <div className="p-3 bg-slate-200/50 dark:bg-white/5 border border-slate-300/40 dark:border-white/5 rounded-2xl space-y-2.5">
+                               <div className="flex items-center justify-between border-b border-slate-200/55 dark:border-white/5 pb-2">
+                                  <div className="flex items-center gap-2.5">
+                                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${alertChannels.whatsapp ? "bg-emerald-500/20 text-emerald-500" : "bg-slate-300/30 text-slate-400"}`}>
+                                        <Smartphone className="w-4 h-4" />
+                                     </div>
+                                     <span className="text-xs font-bold">WhatsApp Alert</span>
+                                  </div>
+                                  <button
+                                    onClick={() => setAlertChannels({ ...alertChannels, whatsapp: !alertChannels.whatsapp })}
+                                    className={`w-10 h-6 rounded-full p-1 transition-all cursor-pointer ${alertChannels.whatsapp ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-700"}`}
+                                  >
+                                     <div className={`w-4 h-4 rounded-full bg-white transition-all transform ${alertChannels.whatsapp ? "translate-x-4" : "translate-x-0"}`} />
+                                  </button>
+                               </div>
+                               {alertChannels.whatsapp && (
+                                  <div className="space-y-1.5 pt-1">
+                                     <label className="text-[9px] font-black uppercase opacity-60 block tracking-wider text-slate-700 dark:text-slate-350">Nomor WhatsApp Pelanggan</label>
+                                     <div className="relative">
+                                        <input 
+                                          type="text" 
+                                          value={alertPhone} 
+                                          onChange={(e) => setAlertPhone(e.target.value)}
+                                          className="w-full text-sm bg-white dark:bg-slate-900 border-2 border-indigo-200 dark:border-white/10 px-3 py-2 pr-10 rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-bold text-slate-800 dark:text-white shadow-sm transition-all placeholder:text-slate-400"
+                                          placeholder="Nomor HP Anda"
+                                        />
+                                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                           <Edit2 className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                                        </div>
+                                     </div>
+                                     <span className="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1">
+                                       <span>✍️</span> Klik & edit langsung kolom di atas untuk mengubah nomor WA Anda.
+                                     </span>
+                                  </div>
+                               )}
+                            </div>
+
+                            {/* Email alert channel */}
+                            <div className="p-3 bg-slate-200/50 dark:bg-white/5 border border-slate-300/40 dark:border-white/5 rounded-2xl space-y-2.5">
+                               <div className="flex items-center justify-between border-b border-slate-200/55 dark:border-white/5 pb-2">
+                                  <div className="flex items-center gap-2.5">
+                                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${alertChannels.email ? "bg-indigo-500/20 text-indigo-500" : "bg-slate-300/30 text-slate-400"}`}>
+                                        <Mail className="w-4 h-4" />
+                                     </div>
+                                     <span className="text-xs font-bold">Email Alert</span>
+                                  </div>
+                                  <button
+                                    onClick={() => setAlertChannels({ ...alertChannels, email: !alertChannels.email })}
+                                    className={`w-10 h-6 rounded-full p-1 transition-all cursor-pointer ${alertChannels.email ? "bg-indigo-500" : "bg-slate-400 dark:bg-slate-700"}`}
+                                  >
+                                     <div className={`w-4 h-4 rounded-full bg-white transition-all transform ${alertChannels.email ? "translate-x-4" : "translate-x-0"}`} />
+                                  </button>
+                               </div>
+                               {alertChannels.email && (
+                                  <div className="space-y-1.5 pt-1">
+                                     <label className="text-[9px] font-black uppercase opacity-60 block tracking-wider text-slate-700 dark:text-slate-350">Alamat Email Penerima</label>
+                                     <div className="relative">
+                                        <input 
+                                          type="email" 
+                                          value={alertEmail} 
+                                          onChange={(e) => setAlertEmail(e.target.value)}
+                                          className="w-full text-sm bg-white dark:bg-slate-900 border-2 border-indigo-200 dark:border-white/10 px-3 py-2 pr-10 rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-mono font-bold text-slate-800 dark:text-white shadow-sm transition-all placeholder:text-slate-400"
+                                          placeholder="Email Anda"
+                                        />
+                                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                           <Edit2 className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                                        </div>
+                                     </div>
+                                     <span className="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1">
+                                       <span>✍️</span> Klik & edit langsung kolom di atas untuk mengubah alamat email.
+                                     </span>
+                                  </div>
+                               )}
+                            </div>
+
+                            {/* Telegram Toggle */}
+                            <div className="p-3 bg-slate-200/50 dark:bg-white/5 border border-slate-300/40 dark:border-white/5 rounded-2xl space-y-2.5">
+                               <div className="flex items-center justify-between border-b border-slate-200/55 dark:border-white/5 pb-2">
+                                  <div className="flex items-center gap-2.5">
+                                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${alertChannels.telegram ? "bg-sky-500/20 text-sky-500" : "bg-slate-300/30 text-slate-400"}`}>
+                                        <Bell className="w-4 h-4" />
+                                     </div>
+                                     <span className="text-xs font-bold">Telegram Alert</span>
+                                  </div>
+                                  <button
+                                    onClick={() => setAlertChannels({ ...alertChannels, telegram: !alertChannels.telegram })}
+                                    className={`w-10 h-6 rounded-full p-1 transition-all cursor-pointer ${alertChannels.telegram ? "bg-sky-500" : "bg-slate-400 dark:bg-slate-700"}`}
+                                  >
+                                     <div className={`w-4 h-4 rounded-full bg-white transition-all transform ${alertChannels.telegram ? "translate-x-4" : "translate-x-0"}`} />
+                                  </button>
+                               </div>
+                               {alertChannels.telegram && (
+                                  <div className="space-y-1.5 pt-1">
+                                     <label className="text-[9px] font-black uppercase opacity-60 block tracking-wider text-slate-700 dark:text-slate-350">ID / Username Telegram</label>
+                                     <div className="relative">
+                                        <input 
+                                          type="text" 
+                                          value={alertTelegram} 
+                                          onChange={(e) => setAlertTelegram(e.target.value)}
+                                          className="w-full text-sm bg-white dark:bg-slate-900 border-2 border-indigo-200 dark:border-white/10 px-3 py-2 pr-10 rounded-xl outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 font-bold text-slate-800 dark:text-white shadow-sm transition-all placeholder:text-slate-400"
+                                          placeholder="Telegram Anda"
+                                        />
+                                        <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                           <Edit2 className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                                        </div>
+                                     </div>
+                                     <span className="text-[9px] text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1">
+                                       <span>✍️</span> Klik & edit langsung kolom di atas untuk mengubah akun Telegram.
+                                     </span>
+                                  </div>
+                               )}
+                            </div>
+
+                         </div>
+
+                         <button
+                           onClick={() => {
+                             const active = [];
+                             if (alertChannels.whatsapp) active.push(`WA: ${alertPhone}`);
+                             if (alertChannels.email && alertEmail) active.push(`Email: ${alertEmail}`);
+                             if (alertChannels.telegram && alertTelegram) active.push(`Telegram: ${alertTelegram}`);
+                             
+                             if (active.length === 0) {
+                               triggerToast("Peringatan: Tidak ada saluran notifikasi aktif yang dipilih!", "warning");
+                             } else {
+                               triggerToast(`✅ Konfigurasi alert sukses disimpan! Saluran aktif: ${active.join(", ")}`, "success");
+                             }
+                           }}
+                           className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] font-black text-xs uppercase tracking-widest text-white dark:text-white rounded-2xl shadow-lg shadow-indigo-600/15 cursor-pointer block text-center transition-all duration-200 border border-indigo-700 dark:border-indigo-500"
+                         >
+                           Simpan Preferensi Alert
+                         </button>
+                      </div>
+
+                      {/* Info Card */}
+                      <div className="p-6 rounded-[2.5rem] bg-indigo-50 dark:bg-white/5 border border-indigo-100 dark:border-white/5 space-y-3">
+                         <h4 className="font-bold text-xs">Mengapa target harga penting?</h4>
+                         <p className="text-[11px] leading-relaxed opacity-80">
+                            Distributor grosir & retail sering menurunkan harga pada sela waktu promosi kilat (Flash Sale), Midnight sale, atau Payday Promo. 
+                            Watchlist CariMurah secara cerdas memicu notifikasi real-time agar Anda dapat segera mengarahkan agen belanja otomatis sebelum stok ludes!
+                         </p>
+                      </div>
+
+                   </div>
                 </div>
              </motion.section>
           ) : mode === "rfq" && analysis?.batchResult ? (
