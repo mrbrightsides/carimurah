@@ -6141,6 +6141,22 @@ export default function App() {
                        )}
                     </div>
 
+                    {/* Google Cloud Agent Builder Execution logs widget (Crucial Hackathon Validation) */}
+                    {analysis.batchResult.agentBuilderLog && (
+                      <div className={`p-6 rounded-[2rem] border ${isB2B ? "bg-indigo-950/20 border-indigo-500/20 text-indigo-200" : "bg-slate-50 border-slate-200 text-slate-800"}`}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Layers className={`w-4 h-4 ${isB2B ? "text-indigo-400 animate-pulse" : "text-emerald-500"}`} />
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Google Cloud Agent Builder Live Status</span>
+                          <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${analysis.batchResult.agentBuilderMode === "live" ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-orange-500/10 text-orange-400 border border-orange-500/20"}`}>
+                            {analysis.batchResult.agentBuilderMode === "live" ? "LIVE DEP" : "ACTIVE ROUTING"}
+                          </span>
+                        </div>
+                        <p className="text-xs font-mono leading-relaxed opacity-85 p-4 rounded-xl bg-black/10 whitespace-pre-wrap text-left">
+                          {analysis.batchResult.agentBuilderLog}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Audit Insights Bento (B2B Enterprise) */}
                     {isB2B && analysis.batchResult.auditInsights && analysis.batchResult.auditInsights.length > 0 && (
                        <div className="space-y-4">

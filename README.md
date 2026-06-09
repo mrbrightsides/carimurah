@@ -97,6 +97,26 @@ CariMurah.ai eliminates database bottlenecks by leveraging MongoDB Atlas as a fu
 
 ---
 
+## 🤖 Google Cloud Agent Builder & Gemini Integration
+
+CariMurah.ai is proud to be powered by the **Google Cloud Agent Builder Suite** alongside **Google Gemini AI** and our official partner track **MongoDB cluster**. We satisfy all hackathon requirements by performing real runtime client execution using Google's official Node.js SDKs with live log displays in our user interface:
+
+### 1. 🔍 Google Cloud Discovery Engine Search Client (`@google-cloud/discoveryengine`)
+* **Usage**: Invoked dynamically via `SearchServiceClient` during our B2B Product Scanning, Audit Invoices, and Wholesale Search pipeline (`/api/process`).
+* **Implementation**: We connect to the target datastore `carimurah-products-datastore` using standard Application Default Credentials (ADC) or credentials supplied at runtime. It runs a live data store search in parallel with Gemini's reasoning loops.
+* **Logs in UI**: The resulting connection logs and execution success indicators are routed back to the frontend in the scanning detail interface.
+
+### 2. 💬 Google Cloud Dialogflow CX Sessions Client (`@google-cloud/dialogflow-cx`)
+* **Usage**: Invoked dynamically via `SessionsClient` during our interactive Procurement AI Chat panel (`/api/agent/chat`).
+* **Implementation**: We translate and pass user inquiries to the Dialogflow CX Playbook sessions (`carimurah-procurement-agent`) to parse intention structures and manage enterprise negotiation trees.
+* **Logs in UI**: Shows active routing and communication traces inside the conversational payload.
+
+### 3. 🧠 Google Gemini 3.5 (@google/genai SDK)
+* **Usage**: Powering our state-of-the-art OCR Audit parser, price forecasting, RFQ auto-generation, and natural Indonesian voice output (`gemini-3.1-flash-tts-preview`).
+* **Implementation**: Calls are made purely server-side with lazy-initialized SDKs, hiding all sensitive credentials securely.
+
+---
+
 ## 📂 Sub-Documentation Hub
 
 To make onboarding and contribution seamless, please review our specialized technical directories:

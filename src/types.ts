@@ -86,6 +86,8 @@ export interface BatchAnalysisResult {
   summaryVoice: string;
   auditInsights?: AuditInsight[];
   rfqStatus?: 'draft' | 'sent' | 'approved';
+  agentBuilderLog?: string;
+  agentBuilderMode?: string;
 }
 
 export interface AnalysisState {

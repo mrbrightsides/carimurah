@@ -75,7 +75,20 @@ Handles modern social single-sign-on (Google Sign-In) and basic credential valid
 
 ---
 
-## 🎙️ 4. Native Device & Bowser SDK Web APIs (No Keys Required)
+## ⚡ 4. Google Cloud Agent Builder
+We use the official Google Cloud Agent Builder client SDKs for real-time datastore searches and conversational flow management during purchase cycles:
+
+*   **Discovery Engine Search Client**: `@google-cloud/discoveryengine` (`SearchServiceClient`). Used to index and query retail catalogs.
+*   **Dialogflow CX Client**: `@google-cloud/dialogflow-cx` (`SessionsClient`). Used to parse and structure negotiation dialogue flows.
+*   **Environmental Variables**:
+    *   `GCP_PROJECT_ID`: Google Cloud Project ID.
+    *   `GCP_DATASTORE_ID`: Target Merchant/Product data store.
+    *   `GCP_LOCATION`: "global" or regional coordinates (e.g., "us-central1").
+    *   `GCP_AGENT_ID`: Dialogflow CX playbooks identifier.
+
+---
+
+## 🎙️ 5. Native Device & Bowser SDK Web APIs (No Keys Required)
 
 The following local native resources are utilized directly via standard client frameworks:
 

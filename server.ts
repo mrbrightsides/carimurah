@@ -6,6 +6,7 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import dotenv from "dotenv";
 import { connectToDatabase } from "./mongodb";
 import { ObjectId } from "mongodb";
+import { queryDiscoveryEngineDataStore, queryDialogflowCXAgent } from "./gcp_agent_builder";
 import { v4 as uuidv4 } from "uuid";
 import crypto from "crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -1480,15 +1481,33 @@ app.post("/api/process", async (req, res) => {
     const result = JSON.parse(textResponse);
     console.log("Analysis successful, items found:", result.items?.length);
 
+    // ✅ Google Cloud Agent Builder (Vertex AI Search / Discovery Engine) runtime invocation
+    let agentBuilderLog = "[GCP Agent Builder] No query input for Agent Builder datastore call.";
+    let agentBuilderMode = "inactive";
+    try {
+      const gcpResult = await queryDiscoveryEngineDataStore(text || "daftar belanja");
+      agentBuilderLog = gcpResult.log;
+      agentBuilderMode = gcpResult.mode;
+    } catch (gcpErr: any) {
+      console.error("GCP Agent Builder query failed:", gcpErr.message);
+      agentBuilderLog = `[GCP Agent Builder] Invocation failed: ${gcpErr.message}`;
+    }
+
+    const enhancedResult = {
+      ...result,
+      agentBuilderLog,
+      agentBuilderMode,
+    };
+
     // ✅ 5. Store in MongoDB Product Cache
-    if (cleanText && !image && !audio && result && result.items && result.items.length > 0) {
+    if (cleanText && !image && !audio && enhancedResult && enhancedResult.items && enhancedResult.items.length > 0) {
       try {
         const { db } = await connectToDatabase();
         await db.collection("product_cache").updateOne(
           { query: cleanText, isB2B: !!isB2B },
           { 
             $set: { 
-              result, 
+              result: enhancedResult, 
               createdAt: new Date().toISOString() 
             } 
           },
@@ -1500,7 +1519,7 @@ app.post("/api/process", async (req, res) => {
       }
     }
 
-    res.json(result);
+    res.json(enhancedResult);
   } catch (error: any) {
     console.error("Processing error:", error);
     let message = error.message || "Terjadi kesalahan internal pada agen.";
@@ -1559,6 +1578,16 @@ app.post("/api/monthly-summary", async (req, res) => {
 app.post("/api/agent/chat", async (req, res) => {
   try {
     const { message, history = [], uid, isB2B, language = "id" } = req.body;
+
+    // ✅ Google Cloud Agent Builder (Dialogflow CX Client) runtime invocation
+    let agentBuilderLog = "";
+    try {
+      const dfResult = await queryDialogflowCXAgent(message, uid || "anonymous-session");
+      agentBuilderLog = dfResult.log;
+    } catch (dfErr: any) {
+      console.error("Dialogflow CX invocation failed:", dfErr.message);
+      agentBuilderLog = `[Dialogflow CX] Failed: ${dfErr.message}`;
+    }
     
     // Tools declarations for Gemini
     const get_user_profile_tool = {
@@ -1805,12 +1834,14 @@ ATURAN PERILAKU:
 
       res.json({
         reply: secondResponse.text,
-        toolCalls: toolLogs
+        toolCalls: toolLogs,
+        agentBuilderLog
       });
     } else {
       res.json({
         reply: response.text,
-        toolCalls: []
+        toolCalls: [],
+        agentBuilderLog
       });
     }
 
