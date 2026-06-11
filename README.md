@@ -106,10 +106,13 @@ CariMurah.ai is proud to be powered by the **Google Cloud Agent Builder Suite** 
 * **Implementation**: We connect to the target datastore `carimurah-products-datastore` using standard Application Default Credentials (ADC) or credentials supplied at runtime. It runs a live data store search in parallel with Gemini's reasoning loops.
 * **Logs in UI**: The resulting connection logs and execution success indicators are routed back to the frontend in the scanning detail interface.
 
-### 2. 💬 Google Cloud Dialogflow CX Sessions Client (`@google-cloud/dialogflow-cx`)
-* **Usage**: Invoked dynamically via `SessionsClient` during our interactive Procurement AI Chat panel (`/api/agent/chat`).
-* **Implementation**: We translate and pass user inquiries to the Dialogflow CX Playbook sessions (`carimurah-procurement-agent`) to parse intention structures and manage enterprise negotiation trees.
-* **Logs in UI**: Shows active routing and communication traces inside the conversational payload.
+### 2. 💬 Google Cloud Dialogflow CX Playbooks & Messenger Integration (`@google-cloud/dialogflow-cx` & DF Messenger)
+* **Usage**: Invoked directly by embedding Google's official `df-messenger` client inside our front-end, and powered backend-side by custom-tailored Google Cloud Playbooks.
+* **Implementation**:
+  - **Sliced OpenAPI Specifications**: To bypass Dialogflow CX multi-tool resolution limitations, we architected **5 distinct, sliced OpenAPI JSON pathways** hosted dynamically at `/openapi/{tool_name}.json` (e.g., `get_user_profile.json`, `update_user_profile.json`, `process_analysis.json`, `get_user_history.json`, `save_to_history.json`). These are configured directly inside Google Cloud Agent Builder integrations.
+  - **DF Messenger v1 Inline integration**: Embedded within the main page layout, offering native, beautiful Google Sans typography matching our green design aesthetic seamlessly.
+  - **Environment Release**: Deployed to the production-stable environment `CariMurah Env` on Dialogflow CX, binding verified webhooks to live production APIs.
+* **Logs in UI**: Shows active inline tool calling, instant MongoDB database reads/writes, dynamic B2B search execution, and automated saving of history records triggered straight from the agent console.
 
 ### 3. 🧠 Google Gemini 3.5 (@google/genai SDK)
 * **Usage**: Powering our state-of-the-art OCR Audit parser, price forecasting, RFQ auto-generation, and natural Indonesian voice output (`gemini-3.1-flash-tts-preview`).
