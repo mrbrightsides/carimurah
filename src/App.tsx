@@ -3346,6 +3346,28 @@ export default function App() {
                      </div>
                   </div>
 
+                  {/* Terms and Privacy Compliance Links */}
+                  <div className={`p-6 rounded-[2rem] border flex items-center justify-between gap-4 ${isB2B ? "bg-white/5 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-800"}`}>
+                     <div className="flex gap-4 items-center">
+                        <FileText className="w-5 h-5 shrink-0 text-indigo-500" />
+                        <div className="space-y-0.5">
+                           <span className="block font-black text-[10px] uppercase tracking-wider opacity-65">Syarat & Kebijakan Privasi</span>
+                           <span className="text-xs font-bold">Syarat Layanan & Kebijakan Privasi Resmi</span>
+                        </div>
+                     </div>
+                     <a 
+                       href="https://elpeef.com/terms-privacy-carimurah/" 
+                       target="_blank" 
+                       rel="noopener noreferrer" 
+                       className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer active:scale-95 ${
+                         isB2B ? "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300" : "bg-slate-200 hover:bg-slate-300 text-slate-800"
+                       }`}
+                     >
+                        <span>Buka Link</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                     </a>
+                  </div>
+
                   {/* Feedback Section */}
                   <div className={`p-8 rounded-[2rem] border ${isB2B ? "bg-white/5 border-white/10" : "bg-indigo-50/35 border-indigo-100 text-slate-900 dark:text-white"} space-y-6`}>
                      <div className="space-y-1">
