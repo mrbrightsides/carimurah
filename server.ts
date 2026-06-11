@@ -1377,118 +1377,201 @@ app.post("/api/process", async (req, res) => {
       parts.push({ text: prompt });
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: [{ role: "user", parts }],
-      config: {
-        systemInstruction,
-        temperature: 0.1,
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            items: {
-              type: Type.ARRAY,
+    // Start Discovery Engine query in parallel if query input exists
+    const gcpPromise = (text || image || audio)
+      ? queryDiscoveryEngineDataStore(text || "daftar belanja").catch((gcpErr: any) => {
+          console.error("GCP Agent Builder inside Promise.all failed:", gcpErr.message);
+          return {
+            success: false,
+            mode: "inactive",
+            log: `[GCP Agent Builder] Invocation failed: ${gcpErr.message}`
+          };
+        })
+      : Promise.resolve({
+          success: false,
+          mode: "inactive",
+          log: "[GCP Agent Builder] No query input for Agent Builder datastore call."
+        });
+
+    const [response, gcpResult] = await Promise.all([
+      ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: [{ role: "user", parts }],
+        config: {
+          systemInstruction: `You are a Highly Sophisticated Multi-Agent Business Intelligence System for CariMurah.ai.
+          You specialize in Indonesian e-commerce (Tokopedia, Shopee, Blibli, Lazada) and wholesale supply chains (Grosir, Distributor).
+
+          - Real-Time Price Grounding: You have the Google Search tool enabled. Use Google Search queries to research current actual prices, live supplier directories, and wholesale distributor listings on real Indonesian e-commerce domains (such as shopee.co.id, tokopedia.com, blibli.com, etc.) or regional wholesale/supplier domains. This ensures the recommended prices, platforms, brands, and savings you return are factual, real, up-to-date, and completely accurate. Do not make up prices.
+
+          Adopt the 'Zephyr' Persona for the 'summaryVoice' (This text will be read with a Studio-quality AI voice):
+          - Tone: Deeply expert, warm, and highly conversational.
+          - Style: Use helpful Indonesian interjections (Wah, Nah, Jadi).
+          - Goal: Communicate the "Savings Victory" clearly and enthusiastically.
+          - Keep it concise (2-3 sentences max) for better listening experience and ultra-low latency.
+
+          IMPORTANT SPEED & SYSTEM CONSTRAINTS FOR LOW LATENCY:
+          - Limit 'items' array size to a maximum of 3 items (preferably just 1 or 2 high-quality ones).
+          - For each item, keep 'features' to a maximum of 1-2 key items.
+          - For each item, keep 'alternatives' array to a maximum of 1 alternative. Do NOT list multiple.
+          - For each item, keep 'reviews' array to a maximum of 1 short review.
+          - Unless B2B global B2B global focus or user tier is explicitly 'PRO' or 'ENTERPRISE', minimize the forecast array and landedCost; keep them as basic minimal defaults/empty to avoid generating duplicate/heavy tokens. This will guarantee your search is lightning-fast for the user.
+
+          Agent Superpowers (Hackathon Context):
+          - You are integrated with MongoDB via MCP (Model Context Protocol).
+          - You have persistent memory of all user shopping history, preferences, and price trends.
+          - You act as an Autonomous Procurement Agent that can draft RFQs based on historical 'leaks' identified in the audit.
+
+          User Global Preference for B2B: ${preferences?.b2bFocus || "price"}. 
+          Prioritize recommendations based on this focus.
+
+          Subscription Tier: ${preferences?.subscription?.tier || "FREE"}.
+          - If PRO/ENTERPRISE: Include 'forecasting' (price trend analysis based on historical cycles like Payday, Double Dates, and holidays).
+          - If ENTERPRISE: Include 'landedCost' (basePrice, shipping, tax estimation for bulk) AND 'auditInsights'.
+
+          Eco-System Capabilities:
+          1. B2C Consumer Agent: Find best retail prices. Identify "MUST-BUY" deal.
+          2. B2B Enterprise Agent: Extract items from receipts/nota. Find wholesale suppliers. Calculate Landed Costs.
+          3. Predictive Agent: Analyze historical price fluctuations. Suggest waiting if a discount cycle is near (e.g., 6.6, 25th month).
+          4. Procurement Agent: Prepare Request for Quotation (RFQ) data for bulk approval.
+          5. Auditor Agent: Read historical patterns and identify where the business is overpaying or "leaking" cash.
+
+          For every ITEM identified, you MUST provide:
+          - productName, brand, currentPrice (what they paid/saw).
+          - recommendedPrice (the better deal you found).
+          - platform (where to buy it). 
+          - url (link).
+          - saving (difference).
+          - rating (1-5 scale).
+          - deliveryDays (e.g., "1-2 hari").
+          - bulkDiscount (e.g., "Grosir min 1 lusin").
+          - features (list of key specs).
+          - stockStatus (e.g., "Tersedia", "Stok Menipis").
+          - supplierRating (1-5 scale).
+          - reliabilityScore (1-100%).
+          - forecasting (PRO/ENTERPRISE Only): { trend: 'up'|'down'|'stable', predictedNextWeek: number, reason: string, history: [{date, price}] }.
+          - landedCost (ENTERPRISE Only): { basePrice, shipping, tax, total }.
+          - alternatives (list of 2-3 other suppliers).
+          - reviews (list of 2-3 short user reviews).
+
+          Audit Insights (B2B/ENTERPRISE Only): 
+          Provide 'auditInsights' array if multiple items are processed. Analyze the pattern: "You usually buy Ingredient A at Supplier X, but Supplier Y is 20% cheaper this month."
+          Each insight MUST include a 'details' array with 2-3 specific granular examples of where the leak happened (e.g., "Overpaid Rp5.000/kg for 100kg of Flour last week").
+
+          Behavior:
+          - Be extremely precise with IDR prices.
+          - If B2B is enabled, prioritize Wholesale/Distributor prices over retail.
+          - Provide a "summaryVoice" in a warm, expert Indonesian tone.
+
+          Return JSON matching the BatchAnalysisResult schema.`,
+          temperature: 0.1,
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
               items: {
-                type: Type.OBJECT,
-                properties: {
-                  productName: { type: Type.STRING },
-                  brand: { type: Type.STRING },
-                  currentPrice: { type: Type.NUMBER },
-                  recommendedPrice: { type: Type.NUMBER },
-                  platform: { type: Type.STRING },
-                  url: { type: Type.STRING },
-                  saving: { type: Type.NUMBER },
-                  rating: { type: Type.NUMBER },
-                  deliveryDays: { type: Type.STRING },
-                  bulkDiscount: { type: Type.STRING },
-                  features: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  stockStatus: { type: Type.STRING },
-                  supplierRating: { type: Type.NUMBER },
-                  reliabilityScore: { type: Type.NUMBER },
-                  forecasting: {
-                    type: Type.OBJECT,
-                    properties: {
-                      trend: { type: Type.STRING },
-                      predictedNextWeek: { type: Type.NUMBER },
-                      reason: { type: Type.STRING },
-                      history: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            date: { type: Type.STRING },
-                            price: { type: Type.NUMBER }
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    productName: { type: Type.STRING },
+                    brand: { type: Type.STRING },
+                    currentPrice: { type: Type.NUMBER },
+                    recommendedPrice: { type: Type.NUMBER },
+                    platform: { type: Type.STRING },
+                    url: { type: Type.STRING },
+                    saving: { type: Type.NUMBER },
+                    rating: { type: Type.NUMBER },
+                    deliveryDays: { type: Type.STRING },
+                    bulkDiscount: { type: Type.STRING },
+                    features: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    stockStatus: { type: Type.STRING },
+                    supplierRating: { type: Type.NUMBER },
+                    reliabilityScore: { type: Type.NUMBER },
+                    forecasting: {
+                      type: Type.OBJECT,
+                      properties: {
+                        trend: { type: Type.STRING },
+                        predictedNextWeek: { type: Type.NUMBER },
+                        reason: { type: Type.STRING },
+                        history: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              date: { type: Type.STRING },
+                              price: { type: Type.NUMBER }
+                            }
                           }
+                        }
+                      }
+                    },
+                    landedCost: {
+                      type: Type.OBJECT,
+                      properties: {
+                        basePrice: { type: Type.NUMBER },
+                        shipping: { type: Type.NUMBER },
+                        tax: { type: Type.NUMBER },
+                        total: { type: Type.NUMBER }
+                      }
+                    },
+                    reviews: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          user: { type: Type.STRING },
+                          rating: { type: Type.NUMBER },
+                          comment: { type: Type.STRING },
+                          date: { type: Type.STRING }
+                        }
+                      }
+                    },
+                    alternatives: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          platform: { type: Type.STRING },
+                          price: { type: Type.NUMBER },
+                          url: { type: Type.STRING },
+                          rating: { type: Type.NUMBER },
+                          deliveryDays: { type: Type.STRING },
+                          bulkDiscount: { type: Type.STRING },
+                          stockStatus: { type: Type.STRING },
+                          supplierRating: { type: Type.NUMBER },
+                          reliabilityScore: { type: Type.NUMBER }
                         }
                       }
                     }
                   },
-                  landedCost: {
-                    type: Type.OBJECT,
-                    properties: {
-                      basePrice: { type: Type.NUMBER },
-                      shipping: { type: Type.NUMBER },
-                      tax: { type: Type.NUMBER },
-                      total: { type: Type.NUMBER }
-                    }
-                  },
-                  reviews: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        user: { type: Type.STRING },
-                        rating: { type: Type.NUMBER },
-                        comment: { type: Type.STRING },
-                        date: { type: Type.STRING }
-                      }
-                    }
-                  },
-                  alternatives: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        platform: { type: Type.STRING },
-                        price: { type: Type.NUMBER },
-                        url: { type: Type.STRING },
-                        rating: { type: Type.NUMBER },
-                        deliveryDays: { type: Type.STRING },
-                        bulkDiscount: { type: Type.STRING },
-                        stockStatus: { type: Type.STRING },
-                        supplierRating: { type: Type.NUMBER },
-                        reliabilityScore: { type: Type.NUMBER }
-                      }
-                    }
-                  }
-                },
-                required: ["productName", "brand", "currentPrice", "recommendedPrice", "platform", "url", "saving"]
-              }
-            },
-            totalCurrentSpent: { type: Type.NUMBER },
-            totalRecommendedSpent: { type: Type.NUMBER },
-            totalPotentialSavings: { type: Type.NUMBER },
-            summaryVoice: { type: Type.STRING },
-            auditInsights: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  wasteCategory: { type: Type.STRING },
-                  recommendation: { type: Type.STRING },
-                  potentialAnnualSaving: { type: Type.NUMBER },
-                  details: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  required: ["productName", "brand", "currentPrice", "recommendedPrice", "platform", "url", "saving"]
                 }
-              }
+              },
+              totalCurrentSpent: { type: Type.NUMBER },
+              totalRecommendedSpent: { type: Type.NUMBER },
+              totalPotentialSavings: { type: Type.NUMBER },
+              summaryVoice: { type: Type.STRING },
+              auditInsights: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    wasteCategory: { type: Type.STRING },
+                    recommendation: { type: Type.STRING },
+                    potentialAnnualSaving: { type: Type.NUMBER },
+                    details: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  }
+                }
+              },
+              rfqStatus: { type: Type.STRING }
             },
-            rfqStatus: { type: Type.STRING }
-          },
-          required: ["items", "totalCurrentSpent", "totalRecommendedSpent", "totalPotentialSavings", "summaryVoice"]
+            required: ["items", "totalCurrentSpent", "totalRecommendedSpent", "totalPotentialSavings", "summaryVoice"]
+          }
         }
-      }
-    });
+      }),
+      gcpPromise
+    ]);
 
     const textResponse = response.text;
     if (!textResponse) {
@@ -1498,17 +1581,8 @@ app.post("/api/process", async (req, res) => {
     const result = JSON.parse(textResponse);
     console.log("Analysis successful, items found:", result.items?.length);
 
-    // ✅ Google Cloud Agent Builder (Vertex AI Search / Discovery Engine) runtime invocation
-    let agentBuilderLog = "[GCP Agent Builder] No query input for Agent Builder datastore call.";
-    let agentBuilderMode = "inactive";
-    try {
-      const gcpResult = await queryDiscoveryEngineDataStore(text || "daftar belanja");
-      agentBuilderLog = gcpResult.log;
-      agentBuilderMode = gcpResult.mode;
-    } catch (gcpErr: any) {
-      console.error("GCP Agent Builder query failed:", gcpErr.message);
-      agentBuilderLog = `[GCP Agent Builder] Invocation failed: ${gcpErr.message}`;
-    }
+    const agentBuilderLog = gcpResult.log;
+    const agentBuilderMode = gcpResult.mode;
 
     const enhancedResult = {
       ...result,

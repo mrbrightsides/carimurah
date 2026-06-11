@@ -1,6 +1,6 @@
 import { SearchServiceClient, ConversationalSearchServiceClient } from "@google-cloud/discoveryengine";
 import { SessionsClient } from "@google-cloud/dialogflow-cx";
-import dialogflowES from "@google-cloud/dialogflow";
+import * as dialogflowES from "@google-cloud/dialogflow";
 
 // Lazy-initialized client variables to prevent crash on boot if environment variables are missing
 let searchClient: SearchServiceClient | null = null;
@@ -10,36 +10,28 @@ let dialogflowESClient: dialogflowES.SessionsClient | null = null;
 
 export function getSearchServiceClient(): SearchServiceClient {
   if (!searchClient) {
-    searchClient = new SearchServiceClient({
-      fallback: true,
-    });
+    searchClient = new SearchServiceClient();
   }
   return searchClient;
 }
 
 export function getConversationalSearchServiceClient(): ConversationalSearchServiceClient {
   if (!convSearchClient) {
-    convSearchClient = new ConversationalSearchServiceClient({
-      fallback: true,
-    });
+    convSearchClient = new ConversationalSearchServiceClient();
   }
   return convSearchClient;
 }
 
 export function getDialogflowCXSessionsClient(): SessionsClient {
   if (!dialogflowClient) {
-    dialogflowClient = new SessionsClient({
-      fallback: true,
-    });
+    dialogflowClient = new SessionsClient();
   }
   return dialogflowClient;
 }
 
 export function getDialogflowESSessionsClient(): dialogflowES.SessionsClient {
   if (!dialogflowESClient) {
-    dialogflowESClient = new dialogflowES.SessionsClient({
-      fallback: true,
-    });
+    dialogflowESClient = new dialogflowES.SessionsClient();
   }
   return dialogflowESClient;
 }
@@ -90,7 +82,18 @@ export async function queryDiscoveryEngineDataStore(queryText: string): Promise<
     };
 
     console.log(`[GCP Agent Builder] Calling Discovery Engine Search with config: ${servingConfigPath}`);
-    const [response] = await client.search(request);
+    // Safety timeout of 2.5 seconds to prevent slowing down the app if GCP is slow or unreachable
+    let timeoutId: NodeJS.Timeout | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error("Timeout (2500ms exceeded)")), 2500);
+    });
+
+    const searchPromise = client.search(request);
+    const [response] = await Promise.race([searchPromise, timeoutPromise]).finally(() => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    });
 
     return {
       success: true,
@@ -99,7 +102,17 @@ export async function queryDiscoveryEngineDataStore(queryText: string): Promise<
       results: response,
     };
   } catch (error: any) {
-    console.error(`[GCP Agent Builder] Search call failed with error: ${error.message}`);
+    console.error(`[GCP Agent Builder] Search call failed with error:`, error);
+    console.error(`[GCP Agent Builder] Error Keys:`, error ? Object.keys(error) : "none");
+    if (error && typeof error === "object") {
+      console.error(`[GCP Agent Builder] Error Details:`, JSON.stringify({
+        message: error.message,
+        code: error.code,
+        status: error.status,
+        details: error.details,
+        metadata: error.metadata
+      }, null, 2));
+    }
     return {
       success: false,
       mode: "failed_fallback",
