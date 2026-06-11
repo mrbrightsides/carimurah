@@ -323,6 +323,23 @@ app.get("/openapi.json", (req, res) => {
   res.sendFile(path.join(process.cwd(), "openapi.json"));
 });
 
+// Sliced OpenAPI Specs for individual Tools in Dialogflow CX / Agent Builder
+app.get("/openapi/get_user_profile.json", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "openapi_get_user_profile.json"));
+});
+app.get("/openapi/update_user_profile.json", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "openapi_update_profile.json"));
+});
+app.get("/openapi/process_analysis.json", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "openapi_process_analysis.json"));
+});
+app.get("/openapi/get_user_history.json", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "openapi_get_user_history.json"));
+});
+app.get("/openapi/save_to_history.json", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "openapi_save_to_history.json"));
+});
+
 // MongoDB API Routes
 
 // Helper for hashing passwords securely for MongoDB Atlas Authentication
