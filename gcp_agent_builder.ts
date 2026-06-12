@@ -8,30 +8,60 @@ let convSearchClient: ConversationalSearchServiceClient | null = null;
 let dialogflowClient: SessionsClient | null = null;
 let dialogflowESClient: dialogflowES.SessionsClient | null = null;
 
+/**
+ * Returns configuration settings for GCP Client libraries, supporting service account keys supplied via environment variables.
+ */
+function getGcpClientConfig(): any {
+  const config: any = {};
+  
+  if (process.env.GCP_SERVICE_ACCOUNT_KEY) {
+    try {
+      config.credentials = JSON.parse(process.env.GCP_SERVICE_ACCOUNT_KEY);
+      console.log("[GCP Agent Builder] Successfully parsed client credentials from GCP_SERVICE_ACCOUNT_KEY JSON.");
+    } catch (e: any) {
+      console.error("[GCP Agent Builder] Failed parsing GCP_SERVICE_ACCOUNT_KEY JSON:", e.message);
+    }
+  } else if (process.env.GCP_CLIENT_EMAIL && process.env.GCP_PRIVATE_KEY) {
+    config.credentials = {
+      client_email: process.env.GCP_CLIENT_EMAIL,
+      private_key: process.env.GCP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    };
+    console.log("[GCP Agent Builder] Configured client credentials using GCP_CLIENT_EMAIL and GCP_PRIVATE_KEY.");
+  } else {
+    console.log("[GCP Agent Builder] No explicit GCP credentials found in environment. Relying on default credentials.");
+  }
+  
+  if (process.env.GCP_PROJECT_ID) {
+    config.projectId = process.env.GCP_PROJECT_ID;
+  }
+  
+  return config;
+}
+
 export function getSearchServiceClient(): SearchServiceClient {
   if (!searchClient) {
-    searchClient = new SearchServiceClient();
+    searchClient = new SearchServiceClient(getGcpClientConfig());
   }
   return searchClient;
 }
 
 export function getConversationalSearchServiceClient(): ConversationalSearchServiceClient {
   if (!convSearchClient) {
-    convSearchClient = new ConversationalSearchServiceClient();
+    convSearchClient = new ConversationalSearchServiceClient(getGcpClientConfig());
   }
   return convSearchClient;
 }
 
 export function getDialogflowCXSessionsClient(): SessionsClient {
   if (!dialogflowClient) {
-    dialogflowClient = new SessionsClient();
+    dialogflowClient = new SessionsClient(getGcpClientConfig());
   }
   return dialogflowClient;
 }
 
 export function getDialogflowESSessionsClient(): dialogflowES.SessionsClient {
   if (!dialogflowESClient) {
-    dialogflowESClient = new dialogflowES.SessionsClient();
+    dialogflowESClient = new dialogflowES.SessionsClient(getGcpClientConfig());
   }
   return dialogflowESClient;
 }
@@ -49,18 +79,19 @@ export async function queryDiscoveryEngineDataStore(queryText: string): Promise<
 }> {
   console.log(`[GCP Agent Builder] queryDiscoveryEngineDataStore helper invoked at runtime with query: "${queryText}"`);
 
-  const projectId = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || "al-qalam-2265a";
+  const explicitProjectId = process.env.GCP_PROJECT_ID;
+  const projectId = explicitProjectId || "al-qalam-2265a";
   const dataStoreId = process.env.GCP_DATASTORE_ID || "carimurah-products-datastore_1780969323238";
   const location = process.env.GCP_LOCATION || "global";
   const collection = "default_collection";
   const servingConfig = "default_serving_config";
 
-  if (!projectId) {
-    console.warn("[GCP Agent Builder] GCP_PROJECT_ID or GOOGLE_CLOUD_PROJECT env is not set. Simulating Agent Builder datastore lookup...");
+  if (!explicitProjectId) {
+    console.warn("[GCP Agent Builder] GCP_PROJECT_ID is not config-defined explicitly. Running in Graceful Developer Simulator Mode...");
     return {
       success: true,
       mode: "simulator",
-      log: "[GCP Agent Builder] SearchServiceClient successfully initialized at runtime via lazy instantiation. (Simulator Mode: No GCP target credentials found. Pre-configured simulated results served.)",
+      log: "[GCP Agent Builder] Bypassed actual SearchServiceClient initialization inside preview workspace (Simulator Mode). Pre-configured simulated results served.",
       results: [],
     };
   }
@@ -138,16 +169,17 @@ export async function queryDialogflowCXAgent(
 }> {
   console.log(`[GCP Agent Builder] queryDialogflowAgent (ES & CX Hybrid) helper invoked at runtime with message: "${messageText}"`);
 
-  const projectId = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || "al-qalam-2265a";
+  const explicitProjectId = process.env.GCP_PROJECT_ID;
+  const projectId = explicitProjectId || "al-qalam-2265a";
   const agentId = process.env.GCP_AGENT_ID || "carimurah-procurement-agent";
   const location = process.env.GCP_LOCATION || "global";
 
-  if (!projectId) {
-    console.warn("[GCP Agent Builder] GCP_PROJECT_ID or GOOGLE_CLOUD_PROJECT env is not set. Simulating Dialogflow conversation...");
+  if (!explicitProjectId) {
+    console.warn("[GCP Agent Builder] GCP_PROJECT_ID is not config-defined explicitly. Running in Graceful Developer Simulator Mode...");
     return {
       success: true,
       mode: "simulator",
-      log: "[GCP Agent Builder] Dialogflow SessionsClient successfully initialized at runtime. (Simulator Mode: No active GCP credentials configured.)",
+      log: "[GCP Agent Builder] Dialogflow SessionsClient successfully bypassed inside preview workspace. (Simulator Mode: No active GCP credentials configured.)",
       reply: "Selamat datang! Saya adalah Asisten Cerdas CariMurah.ai yang ditenagai oleh Google Cloud Agent Builder. Bagaimana saya bisa membantu Anda mencari harga termurah hari ini?",
     };
   }
