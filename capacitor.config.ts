@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   "bundledWebRuntime": false,
   "server": {
-    "url": "https://carimurah-ai-362566137704.asia-southeast1.run.app",
+    "url": "https://carimurah.elpeef.com/",
     "cleartext": true
   }
 };
